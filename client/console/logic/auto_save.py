@@ -1,0 +1,367 @@
+"""
+auto_save.py - Sistema de auto-save de logs, dados de sensores e telemetria
+
+Arquivos salvos em exports/auto/:
+- logs_YYYYMMDD_HHMMSS.txt - Logs do console
+- sensors_YYYYMMDD_HHMMSS.pkl - Dados brutos dos sensores
+- telemetry_YYYYMMDD_HHMMSS.pkl - Dados dos gráficos de telemetria
+"""
+
+import os
+import pickle
+import threading
+import tkinter as tk
+from datetime import datetime
+
+from managers.simple_logger import error, info
+
+from ..utils.constants import (
+    AUTO_EXPORT_DIR,
+    AUTO_SAVE_INTERVAL,
+    MAX_LOG_LINES,
+    MIN_LOGS_FOR_SAVE,
+    MIN_SENSORS_FOR_SAVE,
+    MIN_TELEMETRY_FOR_SAVE,
+)
+
+
+class AutoSaveManager:
+    """Gerencia auto-save periódico de logs, dados de sensores, telemetria e FF"""
+
+    # Mínimo de amostras de FF para disparar o save (~1s a 100Hz)
+    MIN_FF_FOR_SAVE = 100
+
+    def __init__(self, console):
+        """
+        Args:
+            console: Instância de ConsoleInterface
+        """
+        self.console = console
+        self.last_log_count = 0
+        self.last_sensor_count = 0
+        self.last_telemetry_count = 0
+        self.last_ff_count = 0
+
+    def auto_export_on_limit(self):
+        """Exporta automaticamente logs e dados quando o limite é atingido.
+        Snapshot rápido na thread UI, I/O em thread background."""
+        try:
+            os.makedirs(AUTO_EXPORT_DIR, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            # Snapshot rápido na thread UI
+            log_snapshot = None
+            try:
+                log_snapshot = self.console.log_text.get("1.0", tk.END)
+            except Exception:
+                pass
+
+            sensor_snapshot = None
+            if self.console.sensor_display:
+                try:
+                    sd = self.console.sensor_display
+                    with sd.data_lock:
+                        if len(sd.history.get("timestamp", [])) > 0:
+                            sensor_snapshot = {
+                                k: list(v) for k, v in sd.history.items()
+                            }
+                except Exception:
+                    pass
+
+            telemetry_snapshot = None
+            if (
+                hasattr(self.console, "telemetry_plotter")
+                and self.console.telemetry_plotter
+            ):
+                try:
+                    telemetry_snapshot = self.console.telemetry_plotter.get_data_dict()
+                except Exception:
+                    pass
+
+            ff_snapshot = None
+            if (
+                hasattr(self.console, "ff_calculator")
+                and self.console.ff_calculator
+            ):
+                try:
+                    ff_snapshot = self.console.ff_calculator.get_export_snapshot()
+                    if not ff_snapshot.get("timestamp"):
+                        ff_snapshot = None
+                except Exception:
+                    pass
+
+            # I/O em thread background
+            def _write_files():
+                try:
+                    if log_snapshot is not None:
+                        log_filename = os.path.join(
+                            AUTO_EXPORT_DIR, f"logs_{timestamp}.txt"
+                        )
+                        with open(log_filename, "w", encoding="utf-8") as f:
+                            f.write("# F1 Client - Auto Export (Limite atingido)\n")
+                            f.write(
+                                f"# Data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                            )
+                            f.write(f"# Linhas: {MAX_LOG_LINES}\n")
+                            f.write("#" + "=" * 60 + "\n\n")
+                            f.write(log_snapshot)
+
+                    if sensor_snapshot is not None:
+                        sensor_filename = os.path.join(
+                            AUTO_EXPORT_DIR, f"sensors_{timestamp}.pkl"
+                        )
+                        with open(sensor_filename, "wb") as f:
+                            pickle.dump(
+                                sensor_snapshot,
+                                f,
+                                protocol=pickle.HIGHEST_PROTOCOL,
+                            )
+
+                    if telemetry_snapshot is not None:
+                        telemetry_filename = os.path.join(
+                            AUTO_EXPORT_DIR, f"telemetry_{timestamp}.pkl"
+                        )
+                        with open(telemetry_filename, "wb") as f:
+                            pickle.dump(telemetry_snapshot, f)
+
+                    if ff_snapshot is not None:
+                        ff_filename = os.path.join(
+                            AUTO_EXPORT_DIR, f"ff_{timestamp}.pkl"
+                        )
+                        with open(ff_filename, "wb") as f:
+                            pickle.dump(
+                                ff_snapshot,
+                                f,
+                                protocol=pickle.HIGHEST_PROTOCOL,
+                            )
+
+                    info(f"Dados salvos em: {AUTO_EXPORT_DIR}/", "AUTO-EXPORT")
+                except Exception as e:
+                    error(f"Erro I/O: {e}", "AUTO-EXPORT")
+
+            thread = threading.Thread(target=_write_files, daemon=True)
+            thread.start()
+
+        except Exception as e:
+            error(f"Erro: {e}", "AUTO-EXPORT")
+
+    def periodic_auto_save(self):
+        """Auto-save periódico a cada 20 segundos (apenas se houver dados novos).
+        Coleta snapshots rápidos na thread UI, faz I/O em thread background."""
+        if not self.console.is_running:
+            return
+
+        try:
+            # --- Fase 1: Contagem rápida (thread UI) ---
+            current_log_count = 0
+            if hasattr(self.console, "log_text") and self.console.log_text:
+                try:
+                    current_log_count = int(
+                        self.console.log_text.index("end-1c").split(".")[0]
+                    )
+                except Exception:
+                    pass
+
+            current_sensor_count = 0
+            if self.console.sensor_display and hasattr(
+                self.console.sensor_display, "raw_buffer"
+            ):
+                try:
+                    current_sensor_count = len(
+                        self.console.sensor_display.raw_buffer.get("timestamp", [])
+                    )
+                except Exception:
+                    pass
+
+            current_telemetry_count = 0
+            if (
+                hasattr(self.console, "telemetry_plotter")
+                and self.console.telemetry_plotter
+            ):
+                try:
+                    current_telemetry_count = (
+                        self.console.telemetry_plotter.get_data_count()
+                    )
+                except Exception:
+                    pass
+
+            current_ff_count = 0
+            if (
+                hasattr(self.console, "ff_calculator")
+                and self.console.ff_calculator
+            ):
+                try:
+                    current_ff_count = self.console.ff_calculator.get_export_size()
+                except Exception:
+                    pass
+
+            # Só salva se houver dados significativos e novos
+            has_new_data = (
+                current_log_count >= MIN_LOGS_FOR_SAVE
+                or current_sensor_count >= MIN_SENSORS_FOR_SAVE
+                or current_telemetry_count >= MIN_TELEMETRY_FOR_SAVE
+                or current_ff_count >= self.MIN_FF_FOR_SAVE
+            ) and (
+                current_log_count > self.last_log_count
+                or current_sensor_count > self.last_sensor_count
+                or current_telemetry_count > self.last_telemetry_count
+                or current_ff_count > self.last_ff_count
+            )
+
+            if not has_new_data:
+                self._schedule_next()
+                return
+
+            self.last_log_count = current_log_count
+            self.last_sensor_count = current_sensor_count
+            self.last_telemetry_count = current_telemetry_count
+            self.last_ff_count = current_ff_count
+
+            # --- Fase 2: Snapshot rápido dos dados (thread UI, sem I/O) ---
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            os.makedirs(AUTO_EXPORT_DIR, exist_ok=True)
+
+            # Snapshot de logs (leitura do widget Tk — rápida, ~1ms)
+            log_snapshot = None
+            if current_log_count >= MIN_LOGS_FOR_SAVE:
+                try:
+                    log_snapshot = self.console.log_text.get("1.0", tk.END)
+                except Exception:
+                    pass
+
+            # Snapshot de sensores — usa raw_buffer (todos os pacotes, sem drain)
+            sensor_snapshot = None
+            if (
+                current_sensor_count >= MIN_SENSORS_FOR_SAVE
+                and self.console.sensor_display
+            ):
+                try:
+                    sd = self.console.sensor_display
+                    if len(sd.raw_buffer.get("timestamp", [])) > 0:
+                        sensor_snapshot = {
+                            k: list(v) for k, v in sd.raw_buffer.items()
+                        }
+                except Exception:
+                    pass
+
+            # Snapshot de telemetria (cópia de listas — rápida, ~2ms)
+            telemetry_snapshot = None
+            if current_telemetry_count >= MIN_TELEMETRY_FOR_SAVE:
+                try:
+                    telemetry_snapshot = self.console.telemetry_plotter.get_data_dict()
+                except Exception:
+                    pass
+
+            # Snapshot de force feedback (cópia rasa, thread-safe)
+            ff_snapshot = None
+            if current_ff_count >= self.MIN_FF_FOR_SAVE:
+                try:
+                    ff_snapshot = self.console.ff_calculator.get_export_snapshot()
+                except Exception:
+                    pass
+
+            # --- Fase 3: I/O em thread background (não bloqueia UI) ---
+            def _write_files():
+                saved_items = []
+                try:
+                    if log_snapshot is not None:
+                        log_filename = os.path.join(
+                            AUTO_EXPORT_DIR, f"logs_{timestamp}.txt"
+                        )
+                        with open(log_filename, "w", encoding="utf-8") as f:
+                            f.write("# F1 Client - Auto Save (20s)\n")
+                            f.write(
+                                f"# Data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                            )
+                            f.write(f"# Linhas: {current_log_count}\n")
+                            f.write("#" + "=" * 60 + "\n\n")
+                            f.write(log_snapshot)
+                        saved_items.append(f"{current_log_count} logs")
+
+                    if sensor_snapshot is not None:
+                        sensor_filename = os.path.join(
+                            AUTO_EXPORT_DIR, f"sensors_{timestamp}.pkl"
+                        )
+                        with open(sensor_filename, "wb") as f:
+                            pickle.dump(
+                                sensor_snapshot,
+                                f,
+                                protocol=pickle.HIGHEST_PROTOCOL,
+                            )
+                        saved_items.append(f"{current_sensor_count} sensores")
+
+                    if telemetry_snapshot is not None:
+                        telemetry_filename = os.path.join(
+                            AUTO_EXPORT_DIR, f"telemetry_{timestamp}.pkl"
+                        )
+                        with open(telemetry_filename, "wb") as f:
+                            pickle.dump(telemetry_snapshot, f)
+                        saved_items.append(
+                            f"{current_telemetry_count} telemetria"
+                        )
+
+                    if ff_snapshot is not None:
+                        ff_filename = os.path.join(
+                            AUTO_EXPORT_DIR, f"ff_{timestamp}.pkl"
+                        )
+                        with open(ff_filename, "wb") as f:
+                            pickle.dump(
+                                ff_snapshot,
+                                f,
+                                protocol=pickle.HIGHEST_PROTOCOL,
+                            )
+                        saved_items.append(f"{current_ff_count} FF")
+
+                    if saved_items:
+                        info(
+                            f"{', '.join(saved_items)} -> {AUTO_EXPORT_DIR}/",
+                            "AUTO-SAVE",
+                        )
+                except Exception as e:
+                    error(f"Erro I/O: {e}", "AUTO-SAVE")
+
+                # Reset na thread UI (Tkinter não é thread-safe)
+                try:
+                    if self.console.is_running and self.console.root:
+                        self.console.root.after(0, lambda: self._reset_after_save(
+                            log_snapshot is not None,
+                            sensor_snapshot is not None,
+                            telemetry_snapshot is not None,
+                            ff_snapshot is not None,
+                        ))
+                except Exception:
+                    pass
+
+            thread = threading.Thread(target=_write_files, daemon=True)
+            thread.start()
+
+        except Exception as e:
+            error(f"Erro: {e}", "AUTO-SAVE")
+
+        self._schedule_next()
+
+    def _reset_after_save(self, reset_logs, reset_sensors, reset_telemetry, reset_ff=False):
+        """Reseta dados após save bem-sucedido (executado na thread UI)"""
+        try:
+            if reset_logs and self.console.log_text:
+                self.console.log_text.delete("1.0", tk.END)
+                self.last_log_count = 0
+            if reset_sensors and self.console.sensor_display:
+                self.console.sensor_display.reset_statistics()
+                self.last_sensor_count = 0
+            if reset_telemetry and self.console.telemetry_plotter:
+                self.console.telemetry_plotter.reset()
+                self.last_telemetry_count = 0
+            if reset_ff and self.console.ff_calculator:
+                self.console.ff_calculator.reset_export_buffer()
+                self.last_ff_count = 0
+        except Exception:
+            pass
+
+    def _schedule_next(self):
+        """Reagenda próximo auto-save"""
+        if self.console.is_running and self.console.root:
+            try:
+                self.console.root.after(AUTO_SAVE_INTERVAL, self.periodic_auto_save)
+            except Exception:
+                pass

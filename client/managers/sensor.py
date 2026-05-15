@@ -1,0 +1,614 @@
+#!/usr/bin/env python3
+"""
+sensor_display.py - Gerenciamento dos Dados de Sensores
+Responsável por processar e organizar dados do BMI160 para exibição
+
+DADOS SUPORTADOS (37+ campos):
+=============================
+✅ Dados Raw BMI160 (LSB)
+✅ Dados Físicos (m/s², °/s)
+✅ Forças G (frontal, lateral, vertical)
+✅ Ângulos Integrados (roll, pitch, yaw)
+✅ Eventos Detectados (curvas, freios, aceleração, impactos)
+✅ Force Feedback (volante, pedais, assento)
+✅ Configurações do Sensor
+✅ Metadados (timestamp, contadores)
+
+CARACTERÍSTICAS:
+===============
+- Processamento automático de tipos numpy
+- Validação de dados recebidos
+- Cálculos derivados adicionais
+- Histórico de dados para gráficos
+- Detecção de anomalias
+- Estatísticas em tempo real
+"""
+
+import pickle
+import queue
+import threading
+import time
+from collections import defaultdict, deque
+from datetime import datetime
+
+from .simple_logger import debug, error, info, warn
+
+from .constants import DEFAULT_SENSOR_HISTORY_SIZE
+
+
+class SensorDisplay:
+    """Gerencia processamento e exibição de dados de sensores"""
+
+    def __init__(self, sensor_queue=None, log_queue=None, history_size=DEFAULT_SENSOR_HISTORY_SIZE):
+        """
+        Inicializa o processador de sensores
+
+        Args:
+            sensor_queue (Queue): Fila de dados de sensores
+            log_queue (Queue): Fila para mensagens de log
+            history_size (int): Tamanho do histórico de dados (padrão: 10000 = ~100s @ 100Hz)
+        """
+        self.sensor_queue = sensor_queue
+        self.log_queue = log_queue
+        self.history_size = history_size
+
+        # Dados atuais dos sensores
+        self.current_data = {}
+        self.last_update_time = 0
+        self.data_timeout = 5.0  # segundos (aumentado para tolerar perdas UDP)
+
+        # Dados processados para interface
+        self.display_data = {
+            # Dados de conexão
+            "connection_status": "Desconectado",
+            "last_update": "Nunca",
+            "data_age": 0.0,
+            # Dados do BMI160 - Raw (LSB)
+            "bmi160_accel_x_raw": 0,
+            "bmi160_accel_y_raw": 0,
+            "bmi160_accel_z_raw": 0,
+            "bmi160_gyro_x_raw": 0,
+            "bmi160_gyro_y_raw": 0,
+            "bmi160_gyro_z_raw": 0,
+            # Dados do BMI160 - Físicos
+            "accel_x": 0.000,  # m/s²
+            "accel_y": 0.000,
+            "accel_z": 9.810,
+            "gyro_x": 0.000,  # °/s
+            "gyro_y": 0.000,
+            "gyro_z": 0.000,
+            # Forças G calculadas
+            "g_force_frontal": 0.000,
+            "g_force_lateral": 0.000,
+            "g_force_vertical": 0.000,
+            # Ângulos integrados
+            "roll_angle": 0.0,
+            "pitch_angle": 0.0,
+            "yaw_angle": 0.0,
+            # Eventos detectados
+            "is_turning_left": False,
+            "is_turning_right": False,
+            "is_accelerating": False,
+            "is_braking": False,
+            "is_bouncing": False,
+            "impact_detected": False,
+            # Force Feedback
+            "steering_feedback_intensity": 0.0,
+            "brake_pedal_resistance": 0.0,
+            "accelerator_feedback": 0.0,
+            "seat_vibration_intensity": 0.0,
+            "seat_tilt_x": 0.0,
+            "seat_tilt_y": 0.0,
+            # FF Efeitos Dinâmicos
+            "rumble_strong": 0.0,
+            "rumble_weak": 0.0,
+            "periodic_period_ms": 40,
+            "periodic_magnitude": 0.0,
+            "inertia": 5.0,
+            # G923 Inputs
+            "g923_steering": 0.0,
+            "g923_throttle": 0,
+            "g923_brake": 0,
+            # Configurações do sensor
+            "accel_range_g": 2,
+            "gyro_range_dps": 250,
+            "sample_rate": 100,
+            # Métricas do Sistema Raspberry Pi
+            # CPU
+            "rpi_cpu_usage_percent": 0.0,
+            "rpi_cpu_temp_c": 0.0,
+            "rpi_cpu_freq_mhz": 0,
+            "rpi_cpu_status": "NORMAL",
+            "rpi_cpu_temp_status": "NORMAL",
+            # Memória
+            "rpi_mem_total_mb": 0,
+            "rpi_mem_used_mb": 0,
+            "rpi_mem_free_mb": 0,
+            "rpi_mem_usage_percent": 0.0,
+            "rpi_mem_status": "NORMAL",
+            # Disco
+            "rpi_disk_total_gb": 0,
+            "rpi_disk_used_gb": 0,
+            "rpi_disk_free_gb": 0,
+            "rpi_disk_usage_percent": 0.0,
+            "rpi_disk_status": "NORMAL",
+            # Rede
+            "rpi_net_rx_mb": 0.0,
+            "rpi_net_tx_mb": 0.0,
+            "rpi_net_rx_rate_kbps": 0.0,
+            "rpi_net_tx_rate_kbps": 0.0,
+            "rpi_net_interface": "",
+            # Sistema
+            "rpi_uptime_formatted": "0m",
+            "rpi_load_1min": 0.0,
+            "rpi_hostname": "",
+            # Métricas do Sistema Cliente (Notebook/PC)
+            "client_cpu_usage_percent": 0.0,
+            "client_cpu_temp_c": 0.0,
+            "client_cpu_freq_mhz": 0,
+            "client_cpu_cores": 0,
+            "client_mem_total_mb": 0,
+            "client_mem_used_mb": 0,
+            "client_mem_free_mb": 0,
+            "client_mem_usage_percent": 0.0,
+            "client_net_rx_rate_kbps": 0.0,
+            "client_net_tx_rate_kbps": 0.0,
+            # Dados derivados removidos - apenas dados reais dos sensores
+            # Metadados
+            "timestamp": 0,
+            "readings_count": 0,
+            "frame_count": 0,
+            "is_initialized": False,
+        }
+
+        # Histórico para gráficos (pacote mais recente por ciclo — usado pela GUI)
+        self.history = defaultdict(lambda: deque(maxlen=history_size))
+
+        # Buffer raw: salva TODOS os pacotes recebidos (sem drain) para pickle
+        self.MAX_RAW_BUFFER_ROWS = 12000  # ~2 min a 100Hz
+        self.raw_buffer = defaultdict(list)
+
+        # Estatísticas
+        self.stats = {
+            "packets_received": 0,
+            "last_packet_time": 0,
+            "processing_errors": 0,
+            "data_quality": 100.0,
+            "start_time": time.time(),
+        }
+
+        # Lock para thread safety
+        self.data_lock = threading.Lock()
+
+    def _log(self, level, message):
+        """Envia mensagem para fila de log"""
+        if self.log_queue:
+            self.log_queue.put((level, message))
+        else:
+            _fn = {"ERROR": error, "WARN": warn, "DEBUG": debug}.get(level, info)
+            _fn(message, "SENSOR")
+
+    def validate_sensor_data(self, data):
+        """
+        Valida dados recebidos dos sensores
+
+        Args:
+            data (dict): Dados dos sensores
+
+        Returns:
+            bool: True se dados são válidos
+        """
+        try:
+            # BMI160 é opcional - só valida se os dados estiverem presentes
+            bmi160_fields = [
+                "bmi160_accel_x",
+                "bmi160_accel_y",
+                "bmi160_accel_z",
+                "bmi160_gyro_x",
+                "bmi160_gyro_y",
+                "bmi160_gyro_z",
+            ]
+
+            # Verifica se BMI160 está disponível
+            has_bmi160 = any(field in data for field in bmi160_fields)
+
+            # Se não tem BMI160, retorna True mas não processa (dados parciais OK)
+            if not has_bmi160:
+                # Log apenas uma vez a cada 30 segundos
+                if not hasattr(self, "_last_bmi160_warning"):
+                    self._last_bmi160_warning = 0
+                current_time = time.time()
+                if current_time - self._last_bmi160_warning > 30:
+                    self._log("INFO", "BMI160 não disponível - usando dados parciais")
+                    self._last_bmi160_warning = current_time
+                return True  # Aceita dados mesmo sem BMI160
+
+            # Validação de ranges
+            accel_range = 20.0  # ±20 m/s² (máximo razoável)
+            gyro_range = 2000.0  # ±2000 °/s (máximo do BMI160)
+
+            # Valida aceleração
+            for axis in ["x", "y", "z"]:
+                value = data.get(f"bmi160_accel_{axis}", 0)
+                if abs(value) > accel_range:
+                    self._log("WARNING", f"Aceleração {axis} fora do range: {value}")
+                    return False
+
+            # Valida giroscópio
+            for axis in ["x", "y", "z"]:
+                value = data.get(f"bmi160_gyro_{axis}", 0)
+                if abs(value) > gyro_range:
+                    self._log("WARNING", f"Giroscópio {axis} fora do range: {value}")
+                    return False
+
+            # Valida timestamp
+            timestamp = data.get("timestamp", 0)
+            current_time = time.time()
+            if abs(timestamp - current_time) > 60:  # Diferença máxima de 1 minuto
+                self._log("WARNING", f"Timestamp suspeito: {timestamp}")
+                # Não retorna False aqui pois pode ser diferença de timezone
+
+            return True
+
+        except Exception as e:
+            self._log("ERROR", f"Erro na validação de dados: {e}")
+            return False
+
+    def update_history(self, data):
+        """
+        Atualiza histórico de dados para gráficos
+
+        Args:
+            data (dict): Dados atuais dos sensores
+        """
+        try:
+            timestamp = data.get("timestamp", time.time())
+
+            # NÃO usar data_lock aqui — chamado de dentro de update_sensor_data
+            # que já segura o lock
+            self.history["timestamp"].append(timestamp)
+            n = len(self.history["timestamp"])
+
+            # Salva TUDO que chega — sem lista fixa
+            # Campos novos do RPi (ex: timing_*) entram automaticamente
+            for key, value in data.items():
+                if key == "timestamp":
+                    continue
+                # Pula dicts/lists aninhados (ex: system_status)
+                if isinstance(value, (dict, list)):
+                    continue
+                if key not in self.history:
+                    # Novo campo: preenche com None para alinhar (mantém deque com maxlen)
+                    self.history[key] = deque([None] * (n - 1), maxlen=self.history_size)
+                self.history[key].append(value)
+
+
+        except Exception as e:
+            self._log("ERROR", f"Erro ao atualizar histórico: {e}")
+
+    def detect_anomalies(self, data):
+        """
+        Detecta anomalias nos dados dos sensores
+
+        Args:
+            data (dict): Dados dos sensores
+
+        Returns:
+            list: Lista de anomalias detectadas
+        """
+        anomalies = []
+
+        try:
+            # Verifica valores extremos
+            accel_x = data.get("bmi160_accel_x", 0)
+            if abs(accel_x) > 15.0:  # >1.5g é extremo para carrinho
+                anomalies.append(f"Aceleração X extrema: {accel_x:.2f} m/s²")
+
+            gyro_z = data.get("bmi160_gyro_z", 0)
+            if abs(gyro_z) > 500.0:  # >500°/s é muito rápido
+                anomalies.append(f"Rotação Z extrema: {gyro_z:.1f} °/s")
+
+            # Verifica inconsistências
+            g_frontal = data.get("g_force_frontal", 0)
+            if abs(g_frontal) > 2.0:  # >2G é extremo
+                anomalies.append(f"Força G frontal extrema: {g_frontal:.2f}g")
+
+            # Verifica idade dos dados
+            timestamp = data.get("timestamp", 0)
+            age = time.time() - timestamp
+            if age > 1.0:  # Dados mais antigos que 1 segundo
+                anomalies.append(f"Dados antigos: {age:.1f}s")
+
+            return anomalies
+
+        except Exception as e:
+            self._log("ERROR", f"Erro na detecção de anomalias: {e}")
+            return []
+
+    def calculate_data_quality(self, data):
+        """
+        Calcula qualidade dos dados recebidos
+
+        Args:
+            data (dict): Dados dos sensores
+
+        Returns:
+            float: Qualidade dos dados (0-100%)
+        """
+        try:
+            quality = 100.0
+
+            # Reduz qualidade por campos ausentes
+            expected_fields = 37  # Número esperado de campos do BMI160
+            actual_fields = len(data)
+            if actual_fields < expected_fields:
+                quality -= (expected_fields - actual_fields) * 2
+
+            # Reduz qualidade por valores suspeitos
+            anomalies = self.detect_anomalies(data)
+            quality -= len(anomalies) * 10
+
+            # Reduz qualidade por idade dos dados
+            timestamp = data.get("timestamp", 0)
+            age = time.time() - timestamp
+            if age > 0.5:
+                quality -= age * 20
+
+            # Reduz qualidade por erros de processamento
+            error_rate = self.stats["processing_errors"] / max(
+                1, self.stats["packets_received"]
+            )
+            quality -= error_rate * 50
+
+            return max(0.0, min(100.0, quality))
+
+        except Exception as e:
+            self._log("ERROR", f"Erro ao calcular qualidade: {e}")
+            return 50.0
+
+    def process_sensor_data(self, raw_data):
+        """
+        Processa dados recebidos dos sensores
+
+        Args:
+            raw_data (dict): Dados raw dos sensores
+
+        Returns:
+            bool: True se processado com sucesso
+        """
+        try:
+            with self.data_lock:
+                # Valida dados
+                if not self.validate_sensor_data(raw_data):
+                    self.stats["processing_errors"] += 1
+                    return False
+
+                # Atualiza dados atuais
+                self.current_data = raw_data.copy()
+                self.last_update_time = time.time()
+
+                # Atualiza dados para exibição
+                self.display_data.update(raw_data)
+
+                # Atualiza metadados de conexão
+                self.display_data["connection_status"] = "Conectado"
+                self.display_data["last_update"] = time.strftime("%H:%M:%S")
+                self.display_data["data_age"] = 0.0
+
+                # Incrementa contador de frames
+                if "frame_count" not in self.display_data:
+                    self.display_data["frame_count"] = 0
+                self.display_data["frame_count"] += 1
+
+                # Atualiza histórico
+                self.update_history(self.display_data)
+
+                # Calcula qualidade dos dados
+                self.stats["data_quality"] = self.calculate_data_quality(raw_data)
+
+                # Atualiza estatísticas
+                self.stats["packets_received"] += 1
+                self.stats["last_packet_time"] = time.time()
+
+                # Log de anomalias se detectadas
+                anomalies = self.detect_anomalies(raw_data)
+                for anomaly in anomalies:
+                    self._log("WARNING", f"Anomalia detectada: {anomaly}")
+
+                return True
+
+        except Exception as e:
+            self._log("ERROR", f"Erro ao processar dados dos sensores: {e}")
+            self.stats["processing_errors"] += 1
+            return False
+
+    def update_connection_status(self):
+        """Atualiza status da conexão baseado na idade dos dados"""
+        try:
+            with self.data_lock:
+                if self.last_update_time > 0:
+                    age = time.time() - self.last_update_time
+                    self.display_data["data_age"] = age
+
+                    if age > self.data_timeout:
+                        self.display_data["connection_status"] = "Desconectado"
+                        self.display_data["last_update"] = f"Há {age:.1f}s"
+                    else:
+                        self.display_data["connection_status"] = "Conectado"
+
+        except Exception as e:
+            self._log("ERROR", f"Erro ao atualizar status de conexão: {e}")
+
+    def get_display_data(self):
+        """
+        Obtém dados processados para exibição
+
+        Returns:
+            dict: Dados formatados para interface
+        """
+        with self.data_lock:
+            return self.display_data.copy()
+
+    def get_history(self, field, num_points=100):
+        """
+        Obtém histórico de um campo específico
+
+        Args:
+            field (str): Nome do campo
+            num_points (int): Número de pontos a retornar
+
+        Returns:
+            tuple: (timestamps, values)
+        """
+        with self.data_lock:
+            if field in self.history and len(self.history[field]) > 0:
+                timestamps = list(self.history["timestamp"])[-num_points:]
+                values = list(self.history[field])[-num_points:]
+                return timestamps, values
+            else:
+                return [], []
+
+    def get_statistics(self):
+        """
+        Obtém estatísticas do processador de sensores
+
+        Returns:
+            dict: Estatísticas completas
+        """
+        with self.data_lock:
+            elapsed = time.time() - self.stats["start_time"]
+
+            return {
+                "packets_received": self.stats["packets_received"],
+                "processing_errors": self.stats["processing_errors"],
+                "data_quality": round(self.stats["data_quality"], 1),
+                "elapsed_time": round(elapsed, 2),
+                "packets_per_second": (
+                    round(self.stats["packets_received"] / elapsed, 2)
+                    if elapsed > 0
+                    else 0
+                ),
+                "error_rate": round(
+                    self.stats["processing_errors"]
+                    / max(1, self.stats["packets_received"])
+                    * 100,
+                    2,
+                ),
+                "last_packet_time": self.stats["last_packet_time"],
+                "history_size": len(self.history["timestamp"]),
+                "fields_tracked": len(self.display_data),
+            }
+
+    def process_queue(self):
+        """Processa fila de sensores — drena e usa apenas o pacote mais recente (tempo real).
+        Todos os pacotes são salvos no raw_buffer para exportação completa no pickle."""
+        latest = None
+        drained = 0
+
+        # Drena toda a fila, salva todos no raw_buffer, mantém apenas o mais recente
+        while True:
+            try:
+                packet = self.sensor_queue.get_nowait()
+                drained += 1
+                # Salva no raw_buffer (todos os pacotes, sem perda)
+                self._append_raw(packet)
+                latest = packet
+            except queue.Empty:
+                break
+
+        if latest is None:
+            self.update_connection_status()
+            return False
+
+        # Processa apenas o pacote mais recente (GUI em tempo real)
+        self.process_sensor_data(latest)
+        self.update_connection_status()
+        return True
+
+    def _append_raw(self, data):
+        """Append pacote ao raw_buffer (todos os pacotes, sem drain)"""
+        ts = data.get("timestamp", time.time())
+        self.raw_buffer["timestamp"].append(ts)
+        for key, value in data.items():
+            if key == "timestamp":
+                continue
+            if isinstance(value, (dict, list)):
+                continue
+            if key not in self.raw_buffer:
+                n = len(self.raw_buffer["timestamp"]) - 1
+                self.raw_buffer[key] = [None] * n
+            self.raw_buffer[key].append(value)
+
+        # Trim para evitar crescimento ilimitado de memória
+        if len(self.raw_buffer["timestamp"]) > self.MAX_RAW_BUFFER_ROWS:
+            trim = 2000  # Remove os 2000 mais antigos
+            for key in self.raw_buffer:
+                self.raw_buffer[key] = self.raw_buffer[key][trim:]
+
+    def inject_into_last_raw_row(self, fields: dict):
+        """Injeta campos adicionais no último registro do raw_buffer.
+
+        Usado para persistir dados calculados no cliente (timings, force feedback,
+        velocidades, etc.) junto com o pacote mais recente vindo do RPi, para que
+        tudo seja exportado no auto-save (.pkl).
+
+        Chamado após o processamento do pacote mais recente.
+        """
+        with self.data_lock:
+            n = len(self.raw_buffer.get("timestamp", []))
+            if n == 0:
+                return
+            for key, value in fields.items():
+                if key not in self.raw_buffer:
+                    self.raw_buffer[key] = [None] * n
+                # Sobrescreve o último valor (pacote processado)
+                self.raw_buffer[key][-1] = value
+
+    # Alias retrocompatível (nome antigo)
+    inject_client_timings = inject_into_last_raw_row
+
+    def reset_statistics(self):
+        """Reseta estatísticas do processador"""
+        with self.data_lock:
+            self.stats = {
+                "packets_received": 0,
+                "last_packet_time": 0,
+                "processing_errors": 0,
+                "data_quality": 100.0,
+                "start_time": time.time(),
+            }
+
+            # Limpa histórico e raw buffer
+            self.history.clear()
+            self.raw_buffer.clear()
+
+    def export_history_fast(self, filename=None):
+        """
+        Exporta histórico para arquivo Pickle (mais rápido que CSV)
+
+        Args:
+            filename (str): Nome do arquivo (opcional)
+
+        Returns:
+            str: Caminho do arquivo criado
+        """
+        try:
+            if filename is None:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"sensor_history_{timestamp}.pkl"
+
+            # Snapshot rápido sob lock, I/O fora do lock
+            with self.data_lock:
+                if len(self.history["timestamp"]) == 0:
+                    return None
+                snapshot = {k: list(v) for k, v in self.history.items()}
+
+            # Pickle fora do lock — não bloqueia sensor updates
+            with open(filename, "wb") as f:
+                pickle.dump(snapshot, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+            return filename
+
+        except Exception as e:
+            error(f"Erro pickle: {e}", "EXPORT")
+            return None

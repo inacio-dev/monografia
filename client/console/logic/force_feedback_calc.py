@@ -1,0 +1,626 @@
+"""
+force_feedback_calc.py - Calculador de Force Feedback e Forças G
+
+Arquitetura multi-efeito (7 efeitos simultâneos):
+
+Condition effects (kernel ~1kHz):
+- FF_SPRING:   Centering spring (slider Sensitivity)
+- FF_DAMPER:   Damping (slider Damping)
+- FF_FRICTION: Grip do pneu (slider Friction)
+- FF_INERTIA:  Peso do volante (calculado pela velocidade)
+
+Force effects (software, a cada pacote):
+- FF_CONSTANT: Forças dinâmicas do BMI160 (G lateral + yaw)
+
+Vibration effects:
+- FF_RUMBLE:   Vibração de impactos/estrada (accel_z + accel_x)
+- FF_PERIODIC: Vibração senoidal do motor (frequência via throttle)
+
+Detecção de eventos via histórico do BMI160 (~333ms de buffer a 60Hz):
+- Jerk frontal (derivada de accel_x): partida/frenagem brusca
+- Jerk vertical (derivada de accel_z): bumps na pista
+- Rugosidade (desvio padrão de accel_z): qualidade do asfalto
+- Contexto combinado: curva + aceleração = vibrar + puxar simultaneamente
+"""
+
+import math
+import threading
+import time
+from collections import defaultdict, deque
+
+from managers.simple_logger import error
+
+
+class ForceFeedbackCalculator:
+    """Calcula forças G e 7 efeitos de force feedback baseado em dados do BMI160"""
+
+    # Vibração idle do motor (sempre ligado)
+    # NOTA: FF_GAIN a 15% escala tudo ×0.15, então magnitudes altas são necessárias
+    # para compensar. Ex: 60% raw × 0.15 gain = 9% real no motor.
+    IDLE_PERIODIC_PERIOD_MS = 200    # 5Hz — idle engine (motor perceptível)
+    IDLE_PERIODIC_MAGNITUDE = 15.0   # 15% raw → ~2% real com gain 15%
+
+    # Limites de inertia
+    IDLE_INERTIA_PCT = 5.0           # Inertia mínima (peso do volante parado)
+    MAX_INERTIA_PCT = 80.0           # Inertia máxima em alta velocidade
+
+    # Histórico do BMI160 para detecção de eventos
+    HISTORY_SIZE = 20                # ~333ms a 60Hz
+
+    # Buffer de exportação (para auto-save em ff_*.pkl)
+    EXPORT_BUFFER_MAX_ROWS = 30000   # ~5 min a 100Hz
+
+    # Campos persistidos no ff_*.pkl (além de timestamp)
+    # O nome do arquivo é "ff" por histórico, mas o buffer guarda qualquer
+    # métrica calculada no cliente a cada tick (~100Hz) — FF, velocidade,
+    # vídeo, filtros PDI. Todas alinhadas ao mesmo timestamp.
+    EXPORT_FIELDS = (
+        # Forças G
+        "g_force_frontal", "g_force_lateral", "g_force_vertical",
+        # Ângulos
+        "roll_angle", "pitch_angle", "yaw_angle",
+        # FF_CONSTANT
+        "steering_feedback_intensity", "steering_feedback_direction",
+        # FF_RUMBLE
+        "rumble_strong", "rumble_weak",
+        # FF_PERIODIC
+        "periodic_period_ms", "periodic_magnitude",
+        # FF_INERTIA
+        "inertia",
+        # Contexto + derivadas
+        "ff_context",
+        "ff_jerk_frontal", "ff_jerk_vertical",
+        "ff_jerk_throttle", "ff_jerk_brake", "ff_jerk_steering",
+        "ff_roughness",
+        # Inputs do G923 (espelho do hardware para correlação)
+        "g923_steering", "g923_throttle", "g923_brake",
+        # Vídeo — decode + filtros PDI (populados pelo loop do cliente
+        # a partir do VideoDisplay antes de chamar calculate_g_forces_and_ff)
+        "video_decode_ms", "video_filter_ms", "video_filters_active",
+        "video_resolution",
+        # Timing individual por filtro PDI (None quando filtro inativo)
+        "filter_timing_sharpen_ms", "filter_timing_unsharp_ms",
+        "filter_timing_high_boost_ms", "filter_timing_clahe_ms",
+        "filter_timing_bilateral_ms", "filter_timing_super_res_ms",
+        "filter_timing_brightness_up_ms", "filter_timing_brightness_down_ms",
+    )
+
+    def __init__(self, console):
+        """
+        Args:
+            console: Instância de ConsoleInterface
+        """
+        self.console = console
+
+        # Histórico de leituras do BMI160 para derivadas e detecção de eventos
+        self._history = deque(maxlen=self.HISTORY_SIZE)
+
+        # EMA filters para suavização
+        self._filtered_constant_ff = 0.0
+        self._filtered_rumble_strong = 0.0
+        self._filtered_rumble_weak = 0.0
+        self._filtered_inertia = self.IDLE_INERTIA_PCT
+
+        # Integração de ângulos (roll/pitch estático via accel, yaw via gyro)
+        self._yaw_angle = 0.0
+        self._last_angle_time = None
+
+        # Buffer de exportação — chave → lista de valores (inclui timestamp).
+        # Cada append é uma amostra com todos os campos calculados na mesma iteração.
+        # Acessado pela thread de sensores (writer) e pela thread de auto-save (reader).
+        self._export_buffer = defaultdict(list)
+        self._export_lock = threading.Lock()
+
+    # ================================================================
+    # HISTÓRICO E DETECÇÃO DE EVENTOS
+    # ================================================================
+
+    def _add_to_history(self, accel_x, accel_y, accel_z, gyro_z,
+                        throttle, brake, steering):
+        """Armazena leitura no buffer circular para análise temporal"""
+        self._history.append({
+            'ax': accel_x, 'ay': accel_y, 'az': accel_z,
+            'gz': gyro_z, 'thr': throttle, 'brk': brake,
+            'steer': steering, 't': time.monotonic(),
+        })
+
+    def _calc_jerk(self, key):
+        """
+        Calcula taxa de variação (jerk) de um sensor a partir do histórico.
+        Jerk alto = evento brusco (partida, frenagem, bump).
+
+        Returns:
+            float: Derivada em unidades/segundo
+        """
+        if len(self._history) < 3:
+            return 0.0
+        h = list(self._history)
+        n = min(5, len(h))
+        samples = h[-n:]
+        dt = samples[-1]['t'] - samples[0]['t']
+        if dt < 0.001:
+            return 0.0
+        return (samples[-1][key] - samples[0][key]) / dt
+
+    def _road_roughness(self):
+        """
+        Desvio padrão de accel_z no histórico → indicador de rugosidade da pista.
+        Pista lisa ~0.1, pista irregular ~1.0+
+
+        Returns:
+            float: Desvio padrão de accel_z (m/s²)
+        """
+        if len(self._history) < 5:
+            return 0.0
+        samples = [s['az'] for s in list(self._history)[-10:]]
+        mean = sum(samples) / len(samples)
+        variance = sum((x - mean) ** 2 for x in samples) / len(samples)
+        return variance ** 0.5
+
+    # ================================================================
+    # CÁLCULO PRINCIPAL
+    # ================================================================
+
+    def calculate_g_forces_and_ff(self, sensor_data):
+        """
+        Calcula forças G e todos os efeitos dinâmicos baseado em dados do BMI160.
+
+        Usa histórico para detectar eventos (jerk, rugosidade) e combinar efeitos:
+        - Curva: FF_CONSTANT puxa + rumble de stress nos pneus
+        - Aceleração: periodic do motor + rumble contínuo
+        - Frenagem: rumble forte + constant frontal
+        - Bumps: rumble forte instantâneo
+
+        Args:
+            sensor_data (dict): Dados dos sensores incluindo aceleração e giroscópio
+        """
+        try:
+            # Obtém dados de aceleração em m/s² (já convertidos pelo Raspberry Pi)
+            accel_x = sensor_data.get("bmi160_accel_x", 0.0)  # Frontal
+            accel_y = sensor_data.get("bmi160_accel_y", 0.0)  # Lateral
+            accel_z = sensor_data.get("bmi160_accel_z", 9.81)  # Vertical
+
+            # Obtém dados de giroscópio em °/s
+            gyro_x = sensor_data.get("bmi160_gyro_x", 0.0)
+            gyro_y = sensor_data.get("bmi160_gyro_y", 0.0)
+            gyro_z = sensor_data.get("bmi160_gyro_z", 0.0)  # Rotação (yaw)
+
+            # === CALCULA FORÇAS G ===
+            g_force_frontal = accel_x / 9.81
+            g_force_lateral = accel_y / 9.81
+            g_force_vertical = (accel_z - 9.81) / 9.81
+
+            sensor_data["g_force_frontal"] = g_force_frontal
+            sensor_data["g_force_lateral"] = g_force_lateral
+            sensor_data["g_force_vertical"] = g_force_vertical
+
+            # === CALCULA ROLL / PITCH / YAW ===
+            # Roll e Pitch: calculados pelo acelerômetro (estável, sem drift)
+            # Yaw: integrado pelo giroscópio (tem drift, mas útil para telemetria)
+            accel_mag = math.sqrt(accel_x**2 + accel_y**2 + accel_z**2)
+            if accel_mag > 0.5:  # Ignora se aceleração total for muito baixa (ruído)
+                roll_rad = math.atan2(accel_y, accel_z)
+                pitch_rad = math.atan2(-accel_x, math.sqrt(accel_y**2 + accel_z**2))
+                roll_deg = math.degrees(roll_rad)
+                pitch_deg = math.degrees(pitch_rad)
+            else:
+                roll_deg = sensor_data.get("roll_angle", 0.0)
+                pitch_deg = sensor_data.get("pitch_angle", 0.0)
+
+            # Yaw via integração do gyro_z
+            now = time.monotonic()
+            if self._last_angle_time is not None:
+                dt = now - self._last_angle_time
+                if 0 < dt < 0.2:  # Ignora gaps grandes (pausa/reconexão)
+                    self._yaw_angle += gyro_z * dt
+                    # Mantém no range -180° a +180°
+                    self._yaw_angle = ((self._yaw_angle + 180) % 360) - 180
+            self._last_angle_time = now
+
+            sensor_data["roll_angle"] = round(roll_deg, 2)
+            sensor_data["pitch_angle"] = round(pitch_deg, 2)
+            sensor_data["yaw_angle"] = round(self._yaw_angle, 2)
+
+            # Obtém estado atual do G923 (throttle/brake/steering para contexto)
+            throttle = 0
+            brake = 0
+            steering = 0
+            g923 = self.console.g923_manager
+            if g923 and g923.is_connected():
+                throttle = g923._throttle
+                brake = g923._brake
+                steering = g923._steering
+
+            # Armazena no histórico para detecção de eventos
+            self._add_to_history(
+                accel_x, accel_y, accel_z, gyro_z, throttle, brake, steering
+            )
+
+            # === DETECÇÃO DE CONTEXTO ===
+            is_accelerating = throttle > 10
+            is_braking = brake > 10
+            is_turning = abs(g_force_lateral) > 0.08 or abs(gyro_z) > 3
+
+            # === DETECÇÃO DE VEÍCULO PARADO ===
+            # Sem throttle, sem brake e sem movimento significativo = parado
+            # Ruído do BMI160 gera ~0.05g lateral/frontal — ignora
+            vehicle_active = (
+                throttle > 2 or brake > 2
+                or abs(g_force_lateral) > 0.12
+                or abs(g_force_frontal) > 0.12
+                or abs(gyro_z) > 2.5
+            )
+
+            # Jerk do BMI160: taxa de variação (detecta eventos bruscos)
+            jerk_frontal = self._calc_jerk('ax')   # Partida/frenagem brusca
+            jerk_vertical = self._calc_jerk('az')   # Bumps na pista
+
+            # Jerk dos controles: mudanças bruscas nos inputs
+            jerk_throttle = self._calc_jerk('thr')   # Aceleração repentina
+            jerk_brake = self._calc_jerk('brk')      # Frenagem repentina
+            jerk_steering = self._calc_jerk('steer')  # Virada brusca
+
+            # Rugosidade da pista (histórico de accel_z)
+            roughness = self._road_roughness()
+
+            # === 1. FF_CONSTANT: Puxão lateral (G lateral + yaw) ===
+            if vehicle_active:
+                sensitivity = self.console.ff_sensitivity_var.get() / 100.0
+                filter_strength = self.console.ff_filter_var.get() / 100.0
+
+                lateral_component = min(abs(g_force_lateral) * 50, 100)
+                yaw_component = min(abs(gyro_z) / 60.0 * 50, 50)
+                base_ff = min(lateral_component + yaw_component, 100)
+
+                adjusted_ff = base_ff * sensitivity
+                adjusted_ff = (
+                    adjusted_ff * (1.0 - filter_strength)
+                    + self._filtered_constant_ff * filter_strength
+                )
+                self._filtered_constant_ff = adjusted_ff
+                final_ff = max(0.0, min(100.0, adjusted_ff))
+
+                # Direção do puxão
+                lateral_dir = g_force_lateral * 10
+                yaw_dir = gyro_z
+                total_dir = lateral_dir + yaw_dir
+                if total_dir > 1.5:
+                    direction = "right"
+                elif total_dir < -1.5:
+                    direction = "left"
+                else:
+                    direction = "neutral"
+                if final_ff < 2.0:
+                    direction = "neutral"
+            else:
+                # Veículo parado — zera FF_CONSTANT (decai EMA rapidamente)
+                self._filtered_constant_ff *= 0.5
+                final_ff = 0.0
+                direction = "neutral"
+
+            sensor_data["steering_feedback_intensity"] = round(final_ff)
+            sensor_data["steering_feedback_direction"] = direction
+
+            # === 2. FF_RUMBLE: Vibração combinada ===
+            if vehicle_active:
+                # NOTA: FF_GAIN a 15% escala ×0.15, então raw 60% → 9% real.
+                # Magnitudes altas (50-100%) são necessárias para sentir no volante.
+
+                # Componente 1: Vibração do motor (proporcional ao throttle)
+                engine_vibration = throttle / 100.0 * 60  # 0-60% raw
+
+                # Componente 2: Bumps verticais (desvio de accel_z da gravidade)
+                vertical_dev = abs(accel_z - 9.81) / 9.81
+                bump_vibration = min(vertical_dev * 400, 100)
+
+                # Componente 3: Impacto frontal (frenagem/aceleração forte)
+                frontal_impact = min(abs(g_force_frontal) * 200, 100)
+
+                # Componente 4: Jerk BMI160 (eventos bruscos)
+                jerk_impact = min(abs(jerk_frontal) * 8, 80)
+                jerk_bump = min(abs(jerk_vertical) * 8, 80)
+
+                # Componente 5: Jerk controles (mudanças bruscas nos inputs)
+                throttle_burst = min(abs(jerk_throttle) * 0.8, 60) if jerk_throttle > 30 else 0
+                brake_burst = min(abs(jerk_brake) * 1.0, 80) if jerk_brake > 30 else 0
+                steering_burst = min(abs(jerk_steering) * 0.6, 50) if abs(jerk_steering) > 20 else 0
+
+                # Componente 6: Rugosidade da pista (histórico)
+                roughness_vibration = min(roughness * 80, 70)
+
+                # Componente 7: Stress lateral nos pneus (curva = vibração)
+                turn_vibration = min(abs(g_force_lateral) * 150, 80) if is_turning else 0
+
+                # Componente 8: Frenagem contínua
+                brake_rumble = min(brake / 100.0 * 70, 70) if brake > 10 else 0
+
+                # Strong motor: impactos + motor + frenagem + virada
+                strong_raw = min(
+                    engine_vibration * 0.5
+                    + bump_vibration * 0.3
+                    + frontal_impact * 0.3
+                    + jerk_impact * 0.2
+                    + jerk_bump * 0.2
+                    + throttle_burst
+                    + brake_burst
+                    + steering_burst
+                    + brake_rumble * 0.5
+                    + turn_vibration * 0.3,
+                    100,
+                )
+
+                # Weak motor: vibração contínua (motor + rugosidade + curva)
+                weak_raw = min(
+                    engine_vibration * 0.7
+                    + roughness_vibration
+                    + bump_vibration * 0.3
+                    + turn_vibration * 0.4
+                    + brake_rumble * 0.3,
+                    100,
+                )
+
+                # EMA para suavizar (mais responsivo: 60% novo, 40% antigo)
+                self._filtered_rumble_strong = (
+                    strong_raw * 0.6 + self._filtered_rumble_strong * 0.4
+                )
+                self._filtered_rumble_weak = (
+                    weak_raw * 0.6 + self._filtered_rumble_weak * 0.4
+                )
+            else:
+                # Veículo parado — decai rumble rapidamente
+                self._filtered_rumble_strong *= 0.3
+                self._filtered_rumble_weak *= 0.3
+
+            # Quantiza para inteiro — evita que EMA gere valores float
+            # ligeiramente diferentes a cada ciclo, invalidando o cache do G923
+            sensor_data["rumble_strong"] = round(self._filtered_rumble_strong)
+            sensor_data["rumble_weak"] = round(self._filtered_rumble_weak)
+
+            # === 3. FF_PERIODIC: Vibração do motor ===
+            if vehicle_active:
+                # Frequência: 5Hz (200ms) idle → 12,5Hz (80ms) full throttle
+                if throttle > 5:
+                    period_ms = int(200 - (throttle / 100.0 * 120))  # 200ms → 80ms
+                    periodic_magnitude = min(15 + throttle * 0.75, 90)
+                else:
+                    period_ms = self.IDLE_PERIODIC_PERIOD_MS
+                    periodic_magnitude = self.IDLE_PERIODIC_MAGNITUDE
+
+                # Curva aumenta vibração (stress nos pneus)
+                if is_turning:
+                    periodic_magnitude = min(periodic_magnitude + abs(g_force_lateral) * 40, 100)
+            else:
+                # Veículo parado — sem vibração de motor
+                period_ms = self.IDLE_PERIODIC_PERIOD_MS
+                periodic_magnitude = 0.0
+
+            sensor_data["periodic_period_ms"] = int(period_ms)
+            sensor_data["periodic_magnitude"] = round(periodic_magnitude)
+
+            # === 4. FF_INERTIA: Peso do volante ===
+            if vehicle_active:
+                speed_kmh = sensor_data.get("speed_kmh", 0)
+                inertia_speed = min(abs(speed_kmh) / 100.0 * 50, 50)
+                inertia_throttle = throttle / 100.0 * 25
+                inertia_raw = max(
+                    self.IDLE_INERTIA_PCT,
+                    min(inertia_speed + inertia_throttle, self.MAX_INERTIA_PCT),
+                )
+            else:
+                # Veículo parado — inertia mínima
+                inertia_raw = self.IDLE_INERTIA_PCT
+
+            # EMA para suavizar transição
+            self._filtered_inertia = (
+                inertia_raw * 0.3 + self._filtered_inertia * 0.7
+            )
+
+            sensor_data["inertia"] = round(self._filtered_inertia)
+
+            # Limpa histórico quando parado (evita dados velhos ao retomar)
+            if not vehicle_active and len(self._history) > 3:
+                self._history.clear()
+
+            # === DIAGNÓSTICO: dados para UI de monitoramento ===
+            # Contexto de condução
+            ctx_parts = []
+            if is_accelerating:
+                ctx_parts.append("Acelerando")
+            if is_braking:
+                ctx_parts.append("Freando")
+            if is_turning:
+                ctx_parts.append("Curva")
+            sensor_data["ff_context"] = " + ".join(ctx_parts) if ctx_parts else "Idle"
+
+            # Jerks calculados
+            sensor_data["ff_jerk_frontal"] = jerk_frontal
+            sensor_data["ff_jerk_vertical"] = jerk_vertical
+            sensor_data["ff_jerk_throttle"] = jerk_throttle
+            sensor_data["ff_jerk_brake"] = jerk_brake
+            sensor_data["ff_jerk_steering"] = jerk_steering
+            sensor_data["ff_roughness"] = roughness
+
+            # Placeholders para futura expansão
+            sensor_data["brake_pedal_resistance"] = 0.0
+            sensor_data["seat_vibration_intensity"] = self._filtered_rumble_strong
+            sensor_data["seat_tilt_x"] = 0.0
+            sensor_data["seat_tilt_y"] = 0.0
+
+            # Captura inputs atuais do G923 (para correlação no ff_*.pkl)
+            if g923 and g923.is_connected():
+                sensor_data.setdefault("g923_steering", g923._steering)
+                sensor_data.setdefault("g923_throttle", g923._throttle)
+                sensor_data.setdefault("g923_brake", g923._brake)
+
+            # Persiste amostra completa no buffer de exportação
+            self._append_export(sensor_data)
+
+        except Exception as e:
+            error(f"Erro ao calcular forças G e force feedback: {e}", "CONSOLE")
+
+    # ================================================================
+    # BUFFER DE EXPORTAÇÃO (para auto-save em ff_*.pkl)
+    # ================================================================
+
+    def _append_export(self, sensor_data: dict) -> None:
+        """Adiciona uma amostra ao buffer de exportação.
+
+        Invariante: todas as colunas têm o mesmo tamanho após o append.
+        Campos ausentes são gravados como None para manter o alinhamento.
+        """
+        ts = time.time()
+        with self._export_lock:
+            self._export_buffer["timestamp"].append(ts)
+            for key in self.EXPORT_FIELDS:
+                self._export_buffer[key].append(sensor_data.get(key))
+
+            # Trim para evitar crescimento ilimitado
+            n = len(self._export_buffer["timestamp"])
+            if n > self.EXPORT_BUFFER_MAX_ROWS:
+                trim = 5000
+                for k in self._export_buffer:
+                    self._export_buffer[k] = self._export_buffer[k][trim:]
+
+    def get_export_snapshot(self) -> dict:
+        """Retorna uma cópia rasa do buffer (para exportação) sem limpar.
+
+        Chamado pela thread do auto-save. A cópia é barata — usa slices.
+        """
+        with self._export_lock:
+            return {k: list(v) for k, v in self._export_buffer.items()}
+
+    def get_export_size(self) -> int:
+        """Retorna o número atual de amostras no buffer."""
+        with self._export_lock:
+            return len(self._export_buffer.get("timestamp", []))
+
+    def reset_export_buffer(self) -> None:
+        """Limpa o buffer (chamado após auto-save bem-sucedido)."""
+        with self._export_lock:
+            self._export_buffer.clear()
+
+    # ================================================================
+    # EFEITOS DE HARDWARE (sliders)
+    # ================================================================
+
+    def update_hardware_effects(self):
+        """
+        Atualiza efeitos condicionais (spring/damper/friction) dos sliders.
+        Periodic e inertia NÃO são tocados aqui — são atualizados por
+        send_dynamic_effects() quando dados do RPi chegam, ou definidos
+        como idle na inicialização.
+
+        Chamado periodicamente pelo process_queues() e quando sliders mudam.
+        """
+        try:
+            g923 = self.console.g923_manager
+            if not g923 or not g923.is_connected():
+                return
+
+            # Condition effects dos sliders
+            sensitivity = self.console.ff_sensitivity_var.get()
+            friction = self.console.ff_friction_var.get()
+            damping = self.console.ff_damping_var.get()
+
+            g923.update_spring(sensitivity)
+            g923.update_damper(damping)
+            g923.update_friction(friction)
+
+        except Exception as e:
+            error(f"Erro ao atualizar efeitos hardware: {e}", "FF")
+
+    # ================================================================
+    # EFEITOS DINÂMICOS (sensores BMI160)
+    # ================================================================
+
+    def send_dynamic_effects(self, sensor_data):
+        """
+        Envia efeitos dinâmicos (rumble, periodic, inertia) calculados
+        por calculate_g_forces_and_ff() para o G923.
+
+        Chamado após calculate_g_forces_and_ff() no update_sensor_data().
+        """
+        try:
+            g923 = self.console.g923_manager
+            if not g923 or not g923.is_connected():
+                return
+
+            # FF_RUMBLE: vibração de impactos + estrada
+            strong = sensor_data.get("rumble_strong", 0)
+            weak = sensor_data.get("rumble_weak", 0)
+            g923.update_rumble(strong, weak)
+
+            # FF_PERIODIC: vibração do motor (RPM)
+            period = sensor_data.get("periodic_period_ms", self.IDLE_PERIODIC_PERIOD_MS)
+            magnitude = sensor_data.get("periodic_magnitude", self.IDLE_PERIODIC_MAGNITUDE)
+            g923.update_periodic(period, magnitude)
+
+            # FF_INERTIA: peso do volante
+            inertia = sensor_data.get("inertia", self.IDLE_INERTIA_PCT)
+            g923.update_inertia(inertia)
+
+        except Exception:
+            pass
+
+    # ================================================================
+    # UI (LEDs + comando FF)
+    # ================================================================
+
+    def update_ff_leds(self, intensity: float, direction: str):
+        """
+        Atualiza LEDs de direção do force feedback
+
+        Args:
+            intensity: Intensidade da força (0-100%)
+            direction: Direção da força ("left", "right", "neutral")
+        """
+        try:
+            self.console.steering_ff_intensity.config(text=f"{int(intensity)}")
+
+            if intensity < 30:
+                color = "#00ff00"
+            elif intensity < 70:
+                color = "#ffaa00"
+            else:
+                color = "#ff0000"
+
+            self.console.steering_ff_intensity.config(foreground=color)
+
+            if direction == "left":
+                self.console.ff_led_left.itemconfig(
+                    self.console.ff_led_left_circle, fill="#ffaa00", outline="#ff8800"
+                )
+                self.console.ff_led_right.itemconfig(
+                    self.console.ff_led_right_circle, fill="#333333", outline="#666666"
+                )
+            elif direction == "right":
+                self.console.ff_led_left.itemconfig(
+                    self.console.ff_led_left_circle, fill="#333333", outline="#666666"
+                )
+                self.console.ff_led_right.itemconfig(
+                    self.console.ff_led_right_circle, fill="#00aaff", outline="#0088ff"
+                )
+            else:
+                self.console.ff_led_left.itemconfig(
+                    self.console.ff_led_left_circle, fill="#333333", outline="#666666"
+                )
+                self.console.ff_led_right.itemconfig(
+                    self.console.ff_led_right_circle, fill="#333333", outline="#666666"
+                )
+
+        except Exception as e:
+            error(f"Erro ao atualizar LEDs de FF: {e}", "CONSOLE")
+
+    def send_ff_command(self, intensity: float, direction: str):
+        """
+        Envia FF_CONSTANT (forças dinâmicas) para o G923 via evdev
+
+        Args:
+            intensity: Intensidade da força (0-100%)
+            direction: Direção da força ("left", "right", "neutral")
+        """
+        try:
+            if hasattr(self.console, "g923_manager") and self.console.g923_manager:
+                self.console.g923_manager.apply_constant_force(intensity, direction)
+        except Exception:
+            pass

@@ -1,0 +1,83 @@
+# ============================================================================
+# CLIENT REQUIREMENTS - F1 Remote Car Project
+# ============================================================================
+# Instale com: pip install -r requirements.txt
+#
+# PRE-REQUISITOS (Linux):
+#   sudo apt-get install python3-tk
+#
+# Arch Linux:
+#   sudo pacman -S tk
+#
+# ============================================================================
+# SETUP mDNS - HOSTNAME f1client.local (necessario para o RPi encontrar o PC)
+#
+# Ubuntu/Debian:
+#   sudo hostnamectl set-hostname f1client
+#   echo "127.0.1.1 f1client" | sudo tee -a /etc/hosts
+#   sudo apt install avahi-daemon avahi-utils libnss-mdns
+#   sudo systemctl enable --now avahi-daemon
+#
+# Arch Linux:
+#   sudo hostnamectl set-hostname f1client
+#   echo "127.0.1.1 f1client" | sudo tee -a /etc/hosts
+#   sudo pacman -S avahi nss-mdns
+#   # Adicionar "mdns_minimal [NOTFOUND=return]" na linha hosts em /etc/nsswitch.conf
+#   sudo systemctl enable --now avahi-daemon
+#
+# Verificar:
+#   avahi-resolve -n f1client.local   (no PC)
+#   ping f1client.local               (no Raspberry Pi)
+# ============================================================================
+
+# OpenCV para processamento de video e exibicao
+opencv-python>=4.8.0
+
+# NumPy para operacoes com arrays
+numpy>=1.24.0
+
+# Pillow para processamento de imagem (Tkinter)
+Pillow>=10.0.0
+
+# PySerial para comunicacao serial com ESP32 (simulador - legado)
+pyserial>=3.5
+
+# evdev para leitura do volante Logitech G923 e force feedback
+# ============================================================================
+# SETUP DO G923 (Linux):
+#
+# 1. Instalar usb_modeswitch (necessario para G923 versao Xbox 046d:c26d):
+#    Arch Linux: sudo pacman -S usb_modeswitch
+#    Ubuntu/Debian: sudo apt install usb-modeswitch
+#
+# 2. Trocar G923 do modo Xbox GIP para HID (rodar apos plugar o volante):
+#    sudo usb_modeswitch -v 046d -p c26d -M 0f00010142 -C 0x03 -m 01 -r 81
+#    (PID muda de c26d para c26e e o dispositivo aparece em /dev/input/event*)
+#
+# 3. Adicionar usuario ao grupo 'input' para acessar /dev/input/event*:
+#    sudo usermod -a -G input $USER
+#    (requer logout/login para aplicar)
+#
+# 4. Verificar deteccao:
+#    python3 -c "import evdev; [print(evdev.InputDevice(d).name) for d in evdev.list_devices()]"
+#    Deve aparecer: "Logitech G923 Racing Wheel for Xbox One and PC"
+# ============================================================================
+evdev>=1.7.0
+
+# NOTA: PyAV (av) foi removido pois não usamos mais H.264
+# O sistema utiliza apenas MJPEG para transmissão de vídeo
+# Ver: docs/CAMERA_VIDEO_ISSUES.md para detalhes da decisão
+
+# Matplotlib para graficos de telemetria F1 em tempo real
+matplotlib>=3.7.0
+
+# CuPy para processamento de imagem na GPU NVIDIA (OPCIONAL)
+# Requer CUDA Toolkit instalado no sistema!
+# Arch Linux: sudo pacman -S cuda
+# Ubuntu: sudo apt install nvidia-cuda-toolkit
+#
+# Depois instale manualmente:
+#   CUDA 12.x: pip install cupy-cuda12x
+#   CUDA 11.x: pip install cupy-cuda11x
+#
+# Se nao tiver GPU/CUDA, o sistema usa CPU automaticamente

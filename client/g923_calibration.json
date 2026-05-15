@@ -1,0 +1,18 @@
+{
+    "calibration_data": {
+        "THROTTLE": {
+            "min": 0,
+            "max": 255
+        },
+        "BRAKE": {
+            "min": 0,
+            "max": 255
+        },
+        "STEERING": {
+            "min": 24376,
+            "max": 41919
+        }
+    },
+    "last_updated": "2026-03-16T14:30:24.129810",
+    "device": "G923"
+}
