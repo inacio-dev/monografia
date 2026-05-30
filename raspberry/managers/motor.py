@@ -30,10 +30,26 @@ class MotorManager:
 
     # Configurações PWM
     PWM_FREQUENCY = 2000  # 2kHz - boa para motores DC
-    PWM_MAX = 100  # Duty cycle máximo
+    PWM_MAX = 100  # Duty cycle máximo absoluto enviado ao BTS7960
 
-    # Características do motor RC 775
-    MOTOR_MAX_RPM = 9000  # RPM máximo @ 12V sob carga (spec: 6000-10000)
+    # Quebra de atrito estático (kickstart) e compensação de zona morta.
+    # O GRS775 (18V) alimentado a 11,1V só rompe o atrito estático acima de
+    # ~30% de duty e precisa de um piso para manter rotação. VALORES
+    # ESTIMADOS: medir em bancada e reajustar (corrente de stall, duty real
+    # de breakaway e de sustentação).
+    PWM_BREAKAWAY = 30.0  # duty de ruptura observado (referência p/ ajuste)
+    PWM_SUSTAIN = 6.0  # piso de duty com acelerador > 0 (atrito cinético)
+    KICKSTART_PWM = 30.0  # punção para romper o atrito estático
+    KICKSTART_DURATION = 0.3  # duração da punção, em segundos
+
+    # Freio-motor: ganho de quanto o freio corta o alvo do motor. Com eixo
+    # direto sem rolamento unidirecional, a roda força o motor a girar e a
+    # back-EMF retarda. 1.0 = freio 100% zera o motor (freio-motor pleno).
+    ENGINE_BRAKE_GAIN = 1.0
+
+    # Características do motor GRS775 alimentado a 11,1V (3S LiPo).
+    # Ver datasheets/GRS775_resumo.md. Spec de fábrica: 3000-6000 RPM @ 18V.
+    MOTOR_MAX_RPM = 3700  # RPM máximo sem carga estimado @ 11,1V
     MOTOR_MIN_RPM = 600  # RPM mínimo estável
     MOTOR_IDLE_RPM = 800  # RPM marcha lenta
 
@@ -83,6 +99,10 @@ class MotorManager:
         self.last_update_time = time.time()
         self.start_time = time.time()
         self._last_throttle_log = 0.0
+
+        # Quebra de atrito estático (kickstart)
+        self._kickstart_active = False
+        self._kickstart_until = 0.0
 
     def initialize(self) -> bool:
         """
@@ -188,7 +208,8 @@ class MotorManager:
             return
 
         try:
-            self.rpwm.ChangeDutyCycle(self.current_pwm)
+            duty = max(0.0, min(self.current_pwm, self.PWM_MAX))
+            self.rpwm.ChangeDutyCycle(duty)
         except Exception as e:
             warn(f"Erro ao aplicar PWM: {e}", "MOTOR")
 
@@ -197,6 +218,7 @@ class MotorManager:
         self.is_running = False
         self.target_pwm = 0.0
         self.current_pwm = 0.0
+        self._kickstart_active = False
         self.engine_starts += 1
         debug("Motor iniciado", "MOTOR")
 
@@ -222,9 +244,21 @@ class MotorManager:
 
         with self.state_lock:
             # CORREÇÃO: Salva último throttle para reaplicar após troca de marcha
+            prev_throttle = self.last_throttle_percent
             self.last_throttle_percent = throttle_percent
 
             self.is_running = throttle_percent > 0
+
+            # Quebra de atrito estático: dispara a punção só na transição
+            # repouso -> acelerar (acelerador saindo de 0). Mantido o
+            # acelerador, o controle normal assume sem repetir a punção.
+            if (
+                throttle_percent > 0
+                and prev_throttle <= 0
+                and not self._kickstart_active
+            ):
+                self._kickstart_active = True
+                self._kickstart_until = time.time() + self.KICKSTART_DURATION
 
             # Calcula PWM inteligente baseado na marcha (já limita por marcha)
             intelligent_pwm = self._calculate_intelligent_pwm(throttle_percent)
@@ -261,28 +295,40 @@ class MotorManager:
     #
     # Zonas ideais se sobrepõem: ideal_low(g+1) < ideal_high(g)
     # No ponto de troca, o PWM já está na zona ideal da próxima marcha.
-    # 1ª marcha começa em 0% (sem zona morta).
+    # Com acelerador > 0, o piso PWM_SUSTAIN impede que marchas baixas
+    # caiam dentro da zona morta do motor.
     #
-    # Teto absoluto do motor limitado a 50% de duty cycle para proteger o
-    # diferencial do veículo. Mesmo com throttle 100% na 5ª marcha, o PWM
-    # real enviado ao BTS7960 nunca passa de 50%.
+    # Sem teto artificial: a 5ª marcha alcança 100% de duty. O teto de 50%
+    # que protegia o diferencial foi removido a pedido, pois o GRS775 a
+    # 11,1V é fraco demais sob restrição. ATENÇÃO: sem o limite, o torque
+    # pleno passa pelo diferencial, que é o ponto de falha mecânico.
 
     GEAR_PARAMS = {
         # gear: (limiter, ideal_low, ideal_high, τ_base)
-        1: (10,   0,   7,  2.0),  # 1ª: ideal 0-7%
-        2: (20,   6,  15,  4.0),  # 2ª: ideal 6-15% (sobrepõe 1ª em 6-7%)
-        3: (30,  12,  25,  6.0),  # 3ª: ideal 12-25% (sobrepõe 2ª em 12-15%)
-        4: (40,  22,  35,  8.0),  # 4ª: ideal 22-35% (sobrepõe 3ª em 22-25%)
-        5: (50,  32,  48, 10.0),  # 5ª: ideal 32-48% (sobrepõe 4ª em 32-35%)
+        1: (20,    0,  14,  2.0),  # 1ª: ideal 0-14%
+        2: (40,   12,  30,  4.0),  # 2ª: ideal 12-30% (sobrepõe 1ª)
+        3: (60,   24,  50,  6.0),  # 3ª: ideal 24-50% (sobrepõe 2ª)
+        4: (80,   44,  70,  8.0),  # 4ª: ideal 44-70% (sobrepõe 3ª)
+        5: (100,  64,  96, 10.0),  # 5ª: ideal 64-96% (sobrepõe 4ª)
     }
 
     # Multiplicadores de τ por zona (quanto maior, mais lento)
     TAU_MULTIPLIER = {"IDEAL": 1.0, "SUBOPTIMAL": 10.0, "POOR": 25.0}
 
     def _calculate_intelligent_pwm(self, throttle_percent: float) -> float:
-        """Mapeia throttle (0-100%) para PWM real limitado pela marcha atual."""
+        """
+        Mapeia throttle (0-100%) para PWM real da marcha, com compensação
+        de zona morta: acelerador > 0 nunca comanda abaixo de PWM_SUSTAIN,
+        senão o motor fica parado dentro da zona morta. throttle 0 = parado.
+        """
+        if throttle_percent <= 0:
+            return 0.0
         limiter = self.GEAR_PARAMS[self.current_gear][0]
-        return (throttle_percent / 100.0) * limiter
+        if limiter <= self.PWM_SUSTAIN:
+            return min(self.PWM_SUSTAIN, self.PWM_MAX)
+        span = limiter - self.PWM_SUSTAIN
+        pwm = self.PWM_SUSTAIN + (throttle_percent / 100.0) * span
+        return min(pwm, self.PWM_MAX)
 
     def _classify_zone(self, current_pwm: float) -> str:
         """
@@ -352,6 +398,20 @@ class MotorManager:
 
         Para desaceleração, τ é reduzido (mais responsivo ao soltar acelerador).
         """
+        # Punção de quebra de atrito estático: ignora a ODE e força PWM alto
+        # por um curto intervalo, até o motor romper o atrito e girar. Depois
+        # o controle de 1ª ordem assume normalmente.
+        if self._kickstart_active:
+            if time.time() < self._kickstart_until:
+                punch = max(self.KICKSTART_PWM, self.target_pwm)
+                self.current_pwm = min(punch, self.PWM_MAX)
+                return
+            # Fim da punção: snap para o alvo controlado. Sem isso, current_pwm
+            # fica no valor da punção e cai pela zona POOR (τ × 25) tão devagar
+            # que o operador percebe o motor "preso" no valor da partida.
+            self._kickstart_active = False
+            self.current_pwm = min(self.target_pwm, self.PWM_MAX)
+
         zone = self._classify_zone(self.current_pwm)
 
         if zone != self.efficiency_zone:
@@ -359,10 +419,16 @@ class MotorManager:
             tau = self._get_tau(self.current_pwm)
             debug(f"Zona F1: {zone} (τ={tau:.1f}s)", "MOTOR")
 
-        pwm_diff = self.target_pwm - self.current_pwm
+        # Freio-motor: o freio puxa o alvo efetivo do motor para 0 (sem
+        # rolamento unidirecional, a roda força o motor e a back-EMF retarda).
+        # brake_input 100% => motor totalmente liberado, freio-motor pleno.
+        brake_cut = min(1.0, (self.brake_input / 100.0) * self.ENGINE_BRAKE_GAIN)
+        eff_target = self.target_pwm * (1.0 - brake_cut)
+
+        pwm_diff = eff_target - self.current_pwm
 
         if abs(pwm_diff) < 0.1:
-            self.current_pwm = self.target_pwm
+            self.current_pwm = eff_target
             return
 
         tau = self._get_tau(self.current_pwm)
@@ -383,6 +449,12 @@ class MotorManager:
             step = (abs(pwm_diff) / tau_decel) * dt
             self.current_pwm -= min(step, abs(pwm_diff))
 
+        # Saída rápida da zona morta: se o alvo efetivo está abaixo do piso
+        # de sustento e o PWM já caiu para dentro da zona morta, snap a 0.
+        # O motor não gira em [0, PWM_SUSTAIN); dwell ali é só ruído.
+        if eff_target < self.PWM_SUSTAIN and self.current_pwm < self.PWM_SUSTAIN:
+            self.current_pwm = 0.0
+
         # Debug a cada 1s
         now = time.time()
         if now - self.last_zone_check >= 1.0:
@@ -397,6 +469,7 @@ class MotorManager:
             self.is_running = False
             self.target_pwm = 0.0
             self.current_pwm = 0.0
+            self._kickstart_active = False
         warn("PARADA DE EMERGÊNCIA DO MOTOR!", "MOTOR")
 
     def shift_gear_up(self) -> bool:

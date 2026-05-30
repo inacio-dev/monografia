@@ -123,6 +123,28 @@ class PowerMonitorManager:
     # Device ID estável do Pro Micro (não muda com a porta USB)
     PRO_MICRO_DEVICE_ID = "usb-Arduino_LLC_Arduino_Micro-if00"
 
+    # Calibração de tensão da bateria (1 ponto, ganho puro).
+    # Medição direta no cell-checker: 3,80 + 3,72 + 3,80 = 11,32 V.
+    # Pro Micro reportou 12,16 V no mesmo instante → fator 11,32/12,16.
+    # Desvio de ganho típico de divisor resistivo: tolerância dos resistores
+    # e AVCC real do Pro Micro != 5,00 V nominal. Aplicado antes do filtro
+    # para que EMA, percentual e buffer usem valor já calibrado.
+    # Reaferir periodicamente; idealmente fazer calibração em 2 pontos
+    # (~10 V e ~12,6 V) para validar linearidade.
+    BATTERY_VOLTAGE_CAL = 0.9309
+
+    # Faixa do percentual da bateria, em tensão REAL (pós-calibração).
+    # Limite inferior baseado na química do LiPo: 3,4 V/célula é o piso
+    # conservador para preservar a saúde da bateria (abaixo disso a célula
+    # começa a sofrer degradação acelerada). 3,4 × 3 = 10,20 V para 3S.
+    # Limite superior: 13,6 × 0,9309 = 12,66, herdado da régua empírica do
+    # autor reescalada pela calibração de ganho (≈ 4,22 V/célula, levemente
+    # acima dos 4,20 V de carga plena teórica). Se BATTERY_VOLTAGE_CAL
+    # mudar no futuro, estes limites NÃO devem acompanhar: já estão em
+    # tensão real.
+    BATTERY_PCT_MIN = 10.20  # 0% (3,4 V/célula, piso de saúde do LiPo)
+    BATTERY_PCT_MAX = 12.66  # 100% (carga plena empírica)
+
     def __init__(
         self,
         sample_rate: int = 10,
@@ -397,7 +419,9 @@ class PowerMonitorManager:
             if len(parts) != 3:
                 return
 
-            raw_battery = float(parts[0])
+            # Aplica calibração de ganho na tensão da bateria antes de tudo
+            # (filtro EMA, percentual e buffer dependem do valor já corrigido).
+            raw_battery = float(parts[0]) * self.BATTERY_VOLTAGE_CAL
             raw_servos = float(parts[1])
             raw_motor = float(parts[2])
 
@@ -417,9 +441,11 @@ class PowerMonitorManager:
                 self.current_servos = filtered_servos
                 self.current_motor = filtered_motor
 
-                # Calcula percentual da bateria (3S LiPo calibrado na bancada: 11.0V = 0%, 13.6V = 100%)
+                # Calcula percentual em tensão REAL (já calibrada).
+                # Faixa: BATTERY_PCT_MIN = 0%, BATTERY_PCT_MAX = 100%.
                 if filtered_battery > 0:
-                    pct = (filtered_battery - 11.0) / (13.6 - 11.0) * 100.0
+                    span = self.BATTERY_PCT_MAX - self.BATTERY_PCT_MIN
+                    pct = (filtered_battery - self.BATTERY_PCT_MIN) / span * 100.0
                     self.battery_percentage = max(0.0, min(100.0, pct))
                 else:
                     self.battery_percentage = 0.0
