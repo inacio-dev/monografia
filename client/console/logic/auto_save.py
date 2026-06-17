@@ -79,10 +79,7 @@ class AutoSaveManager:
                     pass
 
             ff_snapshot = None
-            if (
-                hasattr(self.console, "ff_calculator")
-                and self.console.ff_calculator
-            ):
+            if hasattr(self.console, "ff_calculator") and self.console.ff_calculator:
                 try:
                     ff_snapshot = self.console.ff_calculator.get_export_snapshot()
                     if not ff_snapshot.get("timestamp"):
@@ -186,10 +183,7 @@ class AutoSaveManager:
                     pass
 
             current_ff_count = 0
-            if (
-                hasattr(self.console, "ff_calculator")
-                and self.console.ff_calculator
-            ):
+            if hasattr(self.console, "ff_calculator") and self.console.ff_calculator:
                 try:
                     current_ff_count = self.console.ff_calculator.get_export_size()
                 except Exception:
@@ -238,9 +232,7 @@ class AutoSaveManager:
                 try:
                     sd = self.console.sensor_display
                     if len(sd.raw_buffer.get("timestamp", [])) > 0:
-                        sensor_snapshot = {
-                            k: list(v) for k, v in sd.raw_buffer.items()
-                        }
+                        sensor_snapshot = {k: list(v) for k, v in sd.raw_buffer.items()}
                 except Exception:
                     pass
 
@@ -296,9 +288,7 @@ class AutoSaveManager:
                         )
                         with open(telemetry_filename, "wb") as f:
                             pickle.dump(telemetry_snapshot, f)
-                        saved_items.append(
-                            f"{current_telemetry_count} telemetria"
-                        )
+                        saved_items.append(f"{current_telemetry_count} telemetria")
 
                     if ff_snapshot is not None:
                         ff_filename = os.path.join(
@@ -323,12 +313,15 @@ class AutoSaveManager:
                 # Reset na thread UI (Tkinter não é thread-safe)
                 try:
                     if self.console.is_running and self.console.root:
-                        self.console.root.after(0, lambda: self._reset_after_save(
-                            log_snapshot is not None,
-                            sensor_snapshot is not None,
-                            telemetry_snapshot is not None,
-                            ff_snapshot is not None,
-                        ))
+                        self.console.root.after(
+                            0,
+                            lambda: self._reset_after_save(
+                                log_snapshot is not None,
+                                sensor_snapshot is not None,
+                                telemetry_snapshot is not None,
+                                ff_snapshot is not None,
+                            ),
+                        )
                 except Exception:
                     pass
 
@@ -340,7 +333,9 @@ class AutoSaveManager:
 
         self._schedule_next()
 
-    def _reset_after_save(self, reset_logs, reset_sensors, reset_telemetry, reset_ff=False):
+    def _reset_after_save(
+        self, reset_logs, reset_sensors, reset_telemetry, reset_ff=False
+    ):
         """Reseta dados após save bem-sucedido (executado na thread UI)"""
         try:
             if reset_logs and self.console.log_text:

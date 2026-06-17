@@ -216,7 +216,10 @@ class KeyboardController:
     def _send_command(self, command_type: str, value: float):
         """Envia comando para o Raspberry Pi"""
         try:
-            if self.network_client and getattr(self.network_client, 'packets_received', 0) > 0:
+            if (
+                self.network_client
+                and getattr(self.network_client, "packets_received", 0) > 0
+            ):
                 success = self.network_client.send_control_command(command_type, value)
                 if success:
                     self.commands_sent += 1
@@ -236,7 +239,9 @@ class KeyboardController:
             return
 
         self.is_active = True
-        self._key_worker_thread = threading.Thread(target=self._key_worker_loop, daemon=True)
+        self._key_worker_thread = threading.Thread(
+            target=self._key_worker_loop, daemon=True
+        )
         self._key_worker_thread.start()
 
         self._log("INFO", "Controlador de teclado iniciado")

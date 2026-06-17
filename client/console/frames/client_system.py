@@ -47,9 +47,7 @@ def create_client_system_frame(console, parent=None):
     )
     console.client_cpu_display.pack()
 
-    tk.Label(
-        cpu_frame, text="%", bg="#2c2c2c", fg="#888888", font=("Arial", 7)
-    ).pack()
+    tk.Label(cpu_frame, text="%", bg="#2c2c2c", fg="#888888", font=("Arial", 7)).pack()
 
     # CPU Temp (se disponível)
     temp_frame = tk.Frame(inner_frame, bg="#2c2c2c", relief=tk.RAISED, bd=1)
@@ -89,9 +87,7 @@ def create_client_system_frame(console, parent=None):
     )
     console.client_mem_display.pack()
 
-    tk.Label(
-        mem_frame, text="%", bg="#2c2c2c", fg="#888888", font=("Arial", 7)
-    ).pack()
+    tk.Label(mem_frame, text="%", bg="#2c2c2c", fg="#888888", font=("Arial", 7)).pack()
 
     # Net RX
     rx_frame = tk.Frame(inner_frame, bg="#2c2c2c", relief=tk.RAISED, bd=1)

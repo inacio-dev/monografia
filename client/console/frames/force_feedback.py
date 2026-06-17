@@ -156,10 +156,16 @@ def create_force_feedback_frame(console):
     # Contexto de condução (linha destaque)
     ctx_frame = tk.Frame(monitor_inner, bg="#3c3c3c")
     ctx_frame.pack(fill=tk.X, pady=(0, 5))
-    tk.Label(ctx_frame, text="Contexto:", bg="#3c3c3c", fg="#aaaaaa",
-             font=("Consolas", 8)).pack(side=tk.LEFT)
-    tk.Label(ctx_frame, textvariable=ff_vars["ff_context"], bg="#3c3c3c",
-             fg="#ffcc00", font=("Consolas", 9, "bold")).pack(side=tk.LEFT, padx=5)
+    tk.Label(
+        ctx_frame, text="Contexto:", bg="#3c3c3c", fg="#aaaaaa", font=("Consolas", 8)
+    ).pack(side=tk.LEFT)
+    tk.Label(
+        ctx_frame,
+        textvariable=ff_vars["ff_context"],
+        bg="#3c3c3c",
+        fg="#ffcc00",
+        font=("Consolas", 9, "bold"),
+    ).pack(side=tk.LEFT, padx=5)
 
     # Efeitos dinâmicos (atualizados por pacote BMI160)
     _create_monitor_row(monitor_inner, "FF_CONSTANT", ff_vars["ff_constant"], "#ff8800")
@@ -177,19 +183,33 @@ def create_force_feedback_frame(console):
 
     # === DETECÇÃO DE EVENTOS (jerk) ===
     events_frame = ttk.LabelFrame(
-        ff_frame, text="Detecção de Eventos (histórico BMI160)", style="Dark.TLabelframe"
+        ff_frame,
+        text="Detecção de Eventos (histórico BMI160)",
+        style="Dark.TLabelframe",
     )
     events_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
 
     events_inner = tk.Frame(events_frame, bg="#3c3c3c")
     events_inner.pack(padx=10, pady=8, fill=tk.X)
 
-    _create_monitor_row(events_inner, "Jerk frontal ", ff_vars["ff_jerk_frontal"], "#cccccc")
-    _create_monitor_row(events_inner, "Jerk vertical", ff_vars["ff_jerk_vertical"], "#cccccc")
-    _create_monitor_row(events_inner, "Jerk throttle", ff_vars["ff_jerk_throttle"], "#44ff44")
-    _create_monitor_row(events_inner, "Jerk brake   ", ff_vars["ff_jerk_brake"], "#ff4444")
-    _create_monitor_row(events_inner, "Jerk steering", ff_vars["ff_jerk_steering"], "#ffcc00")
-    _create_monitor_row(events_inner, "Rugosidade   ", ff_vars["ff_roughness"], "#8888ff")
+    _create_monitor_row(
+        events_inner, "Jerk frontal ", ff_vars["ff_jerk_frontal"], "#cccccc"
+    )
+    _create_monitor_row(
+        events_inner, "Jerk vertical", ff_vars["ff_jerk_vertical"], "#cccccc"
+    )
+    _create_monitor_row(
+        events_inner, "Jerk throttle", ff_vars["ff_jerk_throttle"], "#44ff44"
+    )
+    _create_monitor_row(
+        events_inner, "Jerk brake   ", ff_vars["ff_jerk_brake"], "#ff4444"
+    )
+    _create_monitor_row(
+        events_inner, "Jerk steering", ff_vars["ff_jerk_steering"], "#ffcc00"
+    )
+    _create_monitor_row(
+        events_inner, "Rugosidade   ", ff_vars["ff_roughness"], "#8888ff"
+    )
 
     # === PARÂMETROS AJUSTÁVEIS ===
     params_frame = ttk.LabelFrame(
@@ -286,10 +306,23 @@ def _create_monitor_row(parent, label, var, color):
     """Cria uma linha de monitoramento: label + valor colorido"""
     row = tk.Frame(parent, bg="#3c3c3c")
     row.pack(fill=tk.X, pady=1)
-    tk.Label(row, text=label, bg="#3c3c3c", fg="#aaaaaa",
-             font=("Consolas", 8), width=14, anchor=tk.W).pack(side=tk.LEFT)
-    tk.Label(row, textvariable=var, bg="#3c3c3c", fg=color,
-             font=("Consolas", 9, "bold"), anchor=tk.W).pack(side=tk.LEFT, padx=5)
+    tk.Label(
+        row,
+        text=label,
+        bg="#3c3c3c",
+        fg="#aaaaaa",
+        font=("Consolas", 8),
+        width=14,
+        anchor=tk.W,
+    ).pack(side=tk.LEFT)
+    tk.Label(
+        row,
+        textvariable=var,
+        bg="#3c3c3c",
+        fg=color,
+        font=("Consolas", 9, "bold"),
+        anchor=tk.W,
+    ).pack(side=tk.LEFT, padx=5)
 
 
 def _create_ff_slider(
@@ -375,8 +408,9 @@ def _run_ff_test(console):
 
     def _log(msg):
         log_lines.append(msg)
-        console.root.after(0, lambda m=msg: console.ff_test_status.config(
-            text=m, fg="#ffcc00"))
+        console.root.after(
+            0, lambda m=msg: console.ff_test_status.config(text=m, fg="#ffcc00")
+        )
 
     def _test_sequence():
         test_ids = []
@@ -392,10 +426,16 @@ def _run_ff_test(console):
             try:
                 level = int(32767 * 0.15)
                 eff = evff.Effect(
-                    ecodes.FF_CONSTANT, -1, 0xC000,
-                    evff.Trigger(0, 0), evff.Replay(0, 0),
-                    evff.EffectType(ff_constant_effect=evff.Constant(
-                        level, evff.Envelope(0, 0, 0, 0))),
+                    ecodes.FF_CONSTANT,
+                    -1,
+                    0xC000,
+                    evff.Trigger(0, 0),
+                    evff.Replay(0, 0),
+                    evff.EffectType(
+                        ff_constant_effect=evff.Constant(
+                            level, evff.Envelope(0, 0, 0, 0)
+                        )
+                    ),
                 )
                 eid = dev.upload_effect(eff)
                 dev.write(ecodes.EV_FF, eid, 1)
@@ -414,10 +454,16 @@ def _run_ff_test(console):
             _log("2/4: CONSTANT esquerda 15%...")
             try:
                 eff = evff.Effect(
-                    ecodes.FF_CONSTANT, -1, 0x4000,
-                    evff.Trigger(0, 0), evff.Replay(0, 0),
-                    evff.EffectType(ff_constant_effect=evff.Constant(
-                        level, evff.Envelope(0, 0, 0, 0))),
+                    ecodes.FF_CONSTANT,
+                    -1,
+                    0x4000,
+                    evff.Trigger(0, 0),
+                    evff.Replay(0, 0),
+                    evff.EffectType(
+                        ff_constant_effect=evff.Constant(
+                            level, evff.Envelope(0, 0, 0, 0)
+                        )
+                    ),
                 )
                 eid = dev.upload_effect(eff)
                 dev.write(ecodes.EV_FF, eid, 1)
@@ -436,12 +482,19 @@ def _run_ff_test(console):
             try:
                 mag = int(32767 * 0.80)
                 per = evff.Periodic(
-                    ecodes.FF_SINE, 125, mag, 0, 0,
+                    ecodes.FF_SINE,
+                    125,
+                    mag,
+                    0,
+                    0,
                     evff.Envelope(0, 0, 0, 0),
                 )
                 eff = evff.Effect(
-                    ecodes.FF_PERIODIC, -1, 0,
-                    evff.Trigger(0, 0), evff.Replay(0, 0),
+                    ecodes.FF_PERIODIC,
+                    -1,
+                    0,
+                    evff.Trigger(0, 0),
+                    evff.Replay(0, 0),
                     evff.EffectType(ff_periodic_effect=per),
                 )
                 eid = dev.upload_effect(eff)
@@ -461,8 +514,11 @@ def _run_ff_test(console):
             _log("4/4: RUMBLE strong=100% weak=100%...")
             try:
                 eff = evff.Effect(
-                    ecodes.FF_RUMBLE, -1, 0,
-                    evff.Trigger(0, 0), evff.Replay(0, 0),
+                    ecodes.FF_RUMBLE,
+                    -1,
+                    0,
+                    evff.Trigger(0, 0),
+                    evff.Replay(0, 0),
                     evff.EffectType(ff_rumble_effect=evff.Rumble(65535, 65535)),
                 )
                 eid = dev.upload_effect(eff)
@@ -493,9 +549,14 @@ def _run_ff_test(console):
 
             # Mostra resumo
             summary = " | ".join(log_lines)
-            console.root.after(0, lambda: console.ff_test_status.config(
-                text=summary, fg="#44ff44"))
-            console.root.after(0, lambda: console.ff_test_btn.config(
-                state=tk.NORMAL, text="Testar FF (direita → esquerda → vibrar)"))
+            console.root.after(
+                0, lambda: console.ff_test_status.config(text=summary, fg="#44ff44")
+            )
+            console.root.after(
+                0,
+                lambda: console.ff_test_btn.config(
+                    state=tk.NORMAL, text="Testar FF (direita → esquerda → vibrar)"
+                ),
+            )
 
     threading.Thread(target=_test_sequence, daemon=True, name="FF-Test").start()

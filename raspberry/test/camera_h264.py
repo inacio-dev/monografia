@@ -37,11 +37,15 @@ class TestBuffer(io.BufferedIOBase):
 
         # Log detalhado dos primeiros writes
         if self.write_count <= 10:
-            print(f"  [WRITE #{self.write_count}] {len(data)} bytes - primeiros 20 bytes: {data[:20].hex()}")
+            print(
+                f"  [WRITE #{self.write_count}] {len(data)} bytes - primeiros 20 bytes: {data[:20].hex()}"
+            )
 
         with self.lock:
             # Detecta início de novo frame (NAL unit start code)
-            is_new_frame = data[:4] == b'\x00\x00\x00\x01' or data[:3] == b'\x00\x00\x01'
+            is_new_frame = (
+                data[:4] == b"\x00\x00\x00\x01" or data[:3] == b"\x00\x00\x01"
+            )
 
             if is_new_frame:
                 # Salva frame anterior se existir
@@ -53,17 +57,21 @@ class TestBuffer(io.BufferedIOBase):
                     nal_type = self._get_nal_type(frame_data)
                     nal_name = self._nal_type_name(nal_type)
 
-                    self.frames.append({
-                        'data': frame_data,
-                        'size': frame_size,
-                        'nal_type': nal_type,
-                        'nal_name': nal_name,
-                        'timestamp': time.time()
-                    })
+                    self.frames.append(
+                        {
+                            "data": frame_data,
+                            "size": frame_size,
+                            "nal_type": nal_type,
+                            "nal_name": nal_name,
+                            "timestamp": time.time(),
+                        }
+                    )
                     self.frame_count += 1
 
                     # Log do frame completo
-                    print(f"  [FRAME #{self.frame_count}] {frame_size} bytes - NAL type: {nal_type} ({nal_name})")
+                    print(
+                        f"  [FRAME #{self.frame_count}] {frame_size} bytes - NAL type: {nal_type} ({nal_name})"
+                    )
 
                 # Inicia novo frame
                 self.current_frame = io.BytesIO()
@@ -75,9 +83,9 @@ class TestBuffer(io.BufferedIOBase):
         """Extrai tipo de NAL unit"""
         if len(data) < 5:
             return -1
-        if data[:4] == b'\x00\x00\x00\x01':
+        if data[:4] == b"\x00\x00\x00\x01":
             return data[4] & 0x1F
-        elif data[:3] == b'\x00\x00\x01':
+        elif data[:3] == b"\x00\x00\x01":
             return data[3] & 0x1F
         return -1
 
@@ -115,10 +123,10 @@ class TestBuffer(io.BufferedIOBase):
     def get_stats(self):
         """Retorna estatísticas"""
         return {
-            'write_count': self.write_count,
-            'total_bytes': self.total_bytes,
-            'frame_count': self.frame_count,
-            'frames_in_buffer': len(self.frames)
+            "write_count": self.write_count,
+            "total_bytes": self.total_bytes,
+            "frame_count": self.frame_count,
+            "frames_in_buffer": len(self.frames),
         }
 
 
@@ -153,8 +161,7 @@ def test_camera():
 
         # Configuração de vídeo
         video_config = camera.create_video_configuration(
-            main={"size": (640, 480), "format": "XBGR8888"},
-            encode="main"
+            main={"size": (640, 480), "format": "XBGR8888"}, encode="main"
         )
         camera.configure(video_config)
         print("  ✓ Configuração aplicada: 640x480")
@@ -162,11 +169,7 @@ def test_camera():
 
         # 3. Criar encoder e buffer
         print("[3/5] Criando encoder H.264 e buffer...")
-        encoder = H264Encoder(
-            bitrate=1500000,  # 1.5 Mbps
-            repeat=True,
-            iperiod=30
-        )
+        encoder = H264Encoder(bitrate=1500000, repeat=True, iperiod=30)  # 1.5 Mbps
         buffer = TestBuffer()
         output = FileOutput(buffer)
         print("  ✓ Encoder H.264 criado (1.5 Mbps, keyframe a cada 30 frames)")
@@ -194,7 +197,9 @@ def test_camera():
             elapsed = time.time() - start_time
             if int(elapsed) > int(elapsed - 0.1):
                 stats = buffer.get_stats()
-                print(f"  [{elapsed:.0f}s] Frames: {stats['frame_count']}, Writes: {stats['write_count']}, Bytes: {stats['total_bytes']}")
+                print(
+                    f"  [{elapsed:.0f}s] Frames: {stats['frame_count']}, Writes: {stats['write_count']}, Bytes: {stats['total_bytes']}"
+                )
 
         print("-" * 60)
         print()
@@ -208,20 +213,26 @@ def test_camera():
         print("=" * 60)
         print(f"  Tempo de teste:     {elapsed:.1f} segundos")
         print(f"  Total de writes:    {stats['write_count']}")
-        print(f"  Total de bytes:     {stats['total_bytes']} ({stats['total_bytes']/1024:.1f} KB)")
+        print(
+            f"  Total de bytes:     {stats['total_bytes']} ({stats['total_bytes']/1024:.1f} KB)"
+        )
         print(f"  Frames completos:   {stats['frame_count']}")
         print(f"  FPS médio:          {stats['frame_count']/elapsed:.1f}")
-        print(f"  Bitrate médio:      {(stats['total_bytes']*8/elapsed)/1000000:.2f} Mbps")
+        print(
+            f"  Bitrate médio:      {(stats['total_bytes']*8/elapsed)/1000000:.2f} Mbps"
+        )
         print()
 
         # Verificar último frame
         last_frame = buffer.get_frame()
         if last_frame:
-            print(f"  Último frame: {last_frame['size']} bytes, NAL: {last_frame['nal_name']}")
+            print(
+                f"  Último frame: {last_frame['size']} bytes, NAL: {last_frame['nal_name']}"
+            )
 
         print()
 
-        if stats['frame_count'] > 0:
+        if stats["frame_count"] > 0:
             print("✅ TESTE PASSOU - Encoder H.264 está funcionando!")
             return True
         else:

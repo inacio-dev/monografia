@@ -4,7 +4,6 @@ Teste direto do motor BTS7960 - similar ao teste do BMI160
 Testa configuração e controle PWM do motor RC 775
 """
 
-import sys
 import time
 
 import RPi.GPIO as GPIO
@@ -25,6 +24,7 @@ print(f"  R_EN: GPIO{R_EN_PIN}")
 print(f"  L_EN: GPIO{L_EN_PIN}")
 print(f"  PWM Freq: {PWM_FREQ}Hz")
 
+
 def cleanup_gpio():
     """Limpa configuração GPIO"""
     try:
@@ -32,6 +32,7 @@ def cleanup_gpio():
         print("✓ GPIO limpo")
     except Exception:
         pass
+
 
 def test_motor():
     """Teste completo do motor"""
@@ -79,7 +80,9 @@ def test_motor():
             rpwm.ChangeDutyCycle(pwm_value)
             lpwm.ChangeDutyCycle(0)  # Ré desligada
 
-            print(f"     Motor deve girar no sentido FRENTE com {pwm_value}% de potência")
+            print(
+                f"     Motor deve girar no sentido FRENTE com {pwm_value}% de potência"
+            )
             time.sleep(3)  # 3 segundos para observar
 
             # Para motor
@@ -134,11 +137,12 @@ def test_motor():
     finally:
         cleanup_gpio()
 
+
 def interactive_test():
     """Teste interativo para controle manual"""
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("MODO INTERATIVO - Controle manual do motor")
-    print("="*50)
+    print("=" * 50)
     print("Comandos:")
     print("  f [PWM] - Frente com PWM% (ex: f 50)")
     print("  r [PWM] - Ré com PWM% (ex: r 30)")
@@ -171,13 +175,13 @@ def interactive_test():
             try:
                 cmd = input("Motor> ").strip().lower()
 
-                if cmd == 'q':
+                if cmd == "q":
                     break
-                elif cmd == 's':
+                elif cmd == "s":
                     rpwm.ChangeDutyCycle(0)
                     lpwm.ChangeDutyCycle(0)
                     print("🛑 Motor parado")
-                elif cmd.startswith('f '):
+                elif cmd.startswith("f "):
                     try:
                         pwm = float(cmd.split()[1])
                         pwm = max(0, min(100, pwm))
@@ -186,7 +190,7 @@ def interactive_test():
                         print(f"⬆️ Frente {pwm}%")
                     except Exception:
                         print("❌ Formato: f [PWM] (ex: f 50)")
-                elif cmd.startswith('r '):
+                elif cmd.startswith("r "):
                     try:
                         pwm = float(cmd.split()[1])
                         pwm = max(0, min(100, pwm))
@@ -205,6 +209,7 @@ def interactive_test():
         print(f"❌ Erro: {e}")
     finally:
         cleanup_gpio()
+
 
 if __name__ == "__main__":
     print("Escolha o modo de teste:")

@@ -117,7 +117,9 @@ class ClientSystemMonitor:
             net_dir = "/sys/class/net"
             if os.path.exists(net_dir):
                 for iface in os.listdir(net_dir):
-                    if iface != "lo" and os.path.exists(f"{net_dir}/{iface}/statistics"):
+                    if iface != "lo" and os.path.exists(
+                        f"{net_dir}/{iface}/statistics"
+                    ):
                         self._primary_interface = iface
                         return
 
@@ -208,8 +210,9 @@ class ClientSystemMonitor:
             prev = self._prev_cpu_times
             curr = current_times
 
-            idle_diff = (curr.get("idle", 0) - prev.get("idle", 0)) + \
-                        (curr.get("iowait", 0) - prev.get("iowait", 0))
+            idle_diff = (curr.get("idle", 0) - prev.get("idle", 0)) + (
+                curr.get("iowait", 0) - prev.get("iowait", 0)
+            )
 
             total_diff = sum(curr.values()) - sum(prev.values())
 
@@ -319,11 +322,19 @@ class ClientSystemMonitor:
                 time_diff = current_time - self._prev_net_time
 
                 if time_diff > 0:
-                    rx_diff = current_stats.get("rx_bytes", 0) - self._prev_net_stats.get("rx_bytes", 0)
-                    tx_diff = current_stats.get("tx_bytes", 0) - self._prev_net_stats.get("tx_bytes", 0)
+                    rx_diff = current_stats.get(
+                        "rx_bytes", 0
+                    ) - self._prev_net_stats.get("rx_bytes", 0)
+                    tx_diff = current_stats.get(
+                        "tx_bytes", 0
+                    ) - self._prev_net_stats.get("tx_bytes", 0)
 
-                    data["client_net_rx_rate_kbps"] = round((rx_diff / 1024) / time_diff, 1)
-                    data["client_net_tx_rate_kbps"] = round((tx_diff / 1024) / time_diff, 1)
+                    data["client_net_rx_rate_kbps"] = round(
+                        (rx_diff / 1024) / time_diff, 1
+                    )
+                    data["client_net_tx_rate_kbps"] = round(
+                        (tx_diff / 1024) / time_diff, 1
+                    )
 
             self._prev_net_stats = current_stats
             self._prev_net_time = current_time

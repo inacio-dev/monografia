@@ -23,7 +23,7 @@ import threading
 import time
 from typing import Any, Dict, Optional
 
-from managers.logger import debug, error, info, warn
+from managers.logger import error, info, warn
 
 
 class RpiSystemMonitor:
@@ -130,7 +130,9 @@ class RpiSystemMonitor:
             net_dir = "/sys/class/net"
             if os.path.exists(net_dir):
                 for iface in os.listdir(net_dir):
-                    if iface != "lo" and os.path.exists(f"{net_dir}/{iface}/statistics"):
+                    if iface != "lo" and os.path.exists(
+                        f"{net_dir}/{iface}/statistics"
+                    ):
                         self._primary_interface = iface
                         info(f"Interface de rede (fallback): {iface}", "RPI_SYS")
                         return
@@ -248,8 +250,9 @@ class RpiSystemMonitor:
             prev = self._prev_cpu_times
             curr = current_times
 
-            idle_diff = (curr.get("idle", 0) - prev.get("idle", 0)) + \
-                        (curr.get("iowait", 0) - prev.get("iowait", 0))
+            idle_diff = (curr.get("idle", 0) - prev.get("idle", 0)) + (
+                curr.get("iowait", 0) - prev.get("iowait", 0)
+            )
 
             total_diff = sum(curr.values()) - sum(prev.values())
 
@@ -332,7 +335,6 @@ class RpiSystemMonitor:
 
             # RAM
             total = meminfo.get("MemTotal", 0) // 1024  # MB
-            free = meminfo.get("MemFree", 0) // 1024
             available = meminfo.get("MemAvailable", 0) // 1024
             buffers = meminfo.get("Buffers", 0) // 1024
             cached = meminfo.get("Cached", 0) // 1024
@@ -445,20 +447,32 @@ class RpiSystemMonitor:
             data["rpi_net_interface"] = self._primary_interface
 
             # Dados formatados (MB)
-            data["rpi_net_rx_mb"] = round(current_stats.get("rx_bytes", 0) / (1024 * 1024), 2)
-            data["rpi_net_tx_mb"] = round(current_stats.get("tx_bytes", 0) / (1024 * 1024), 2)
+            data["rpi_net_rx_mb"] = round(
+                current_stats.get("rx_bytes", 0) / (1024 * 1024), 2
+            )
+            data["rpi_net_tx_mb"] = round(
+                current_stats.get("tx_bytes", 0) / (1024 * 1024), 2
+            )
 
             # Calcula taxa de transferência
             if self._prev_net_stats and self._prev_net_time > 0:
                 time_diff = current_time - self._prev_net_time
 
                 if time_diff > 0:
-                    rx_diff = current_stats.get("rx_bytes", 0) - self._prev_net_stats.get("rx_bytes", 0)
-                    tx_diff = current_stats.get("tx_bytes", 0) - self._prev_net_stats.get("tx_bytes", 0)
+                    rx_diff = current_stats.get(
+                        "rx_bytes", 0
+                    ) - self._prev_net_stats.get("rx_bytes", 0)
+                    tx_diff = current_stats.get(
+                        "tx_bytes", 0
+                    ) - self._prev_net_stats.get("tx_bytes", 0)
 
                     # KB/s
-                    data["rpi_net_rx_rate_kbps"] = round((rx_diff / 1024) / time_diff, 2)
-                    data["rpi_net_tx_rate_kbps"] = round((tx_diff / 1024) / time_diff, 2)
+                    data["rpi_net_rx_rate_kbps"] = round(
+                        (rx_diff / 1024) / time_diff, 2
+                    )
+                    data["rpi_net_tx_rate_kbps"] = round(
+                        (tx_diff / 1024) / time_diff, 2
+                    )
 
             # Atualiza dados anteriores
             self._prev_net_stats = current_stats

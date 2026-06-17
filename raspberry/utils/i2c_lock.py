@@ -25,9 +25,9 @@ class PriorityI2CLock:
         servo → servo → servo → BMI160 → BMI160 → servo → ...
     """
 
-    PRIORITY_HIGH = 0    # Steering, Brake
+    PRIORITY_HIGH = 0  # Steering, Brake
     PRIORITY_MEDIUM = 1  # BMI160
-    PRIORITY_LOW = 2     # INA219
+    PRIORITY_LOW = 2  # INA219
 
     # Turnos consecutivos antes de ceder vez
     WEIGHT = {0: 3, 1: 2, 2: 1}
@@ -37,30 +37,29 @@ class PriorityI2CLock:
         self._cond = threading.Condition(self._lock)
         self._waiting = [0, 0, 0]  # Contadores por prioridade
         self._busy = False
-        self._run_count = 0   # Acessos consecutivos da mesma prioridade
-        self._run_prio = -1   # Última prioridade que executou
+        self._run_count = 0  # Acessos consecutivos da mesma prioridade
+        self._run_prio = -1  # Última prioridade que executou
 
     def _can_acquire(self, priority: int) -> bool:
         """Verifica se esta prioridade pode adquirir o lock agora."""
         if self._busy:
             return False
 
-        others_waiting = any(
-            self._waiting[p] > 0 for p in range(3) if p != priority
-        )
+        others_waiting = any(self._waiting[p] > 0 for p in range(3) if p != priority)
 
         # Se excedeu peso e outros estão esperando → ceder vez
-        if (self._run_prio == priority
-                and self._run_count >= self.WEIGHT.get(priority, 1)
-                and others_waiting):
+        if (
+            self._run_prio == priority
+            and self._run_count >= self.WEIGHT.get(priority, 1)
+            and others_waiting
+        ):
             return False
 
         # Se prioridade maior está esperando e NÃO excedeu seu peso → esperar
         for p in range(priority):
             if self._waiting[p] > 0:
                 higher_exceeded = (
-                    self._run_prio == p
-                    and self._run_count >= self.WEIGHT.get(p, 1)
+                    self._run_prio == p and self._run_count >= self.WEIGHT.get(p, 1)
                 )
                 if not higher_exceeded:
                     return False
@@ -73,7 +72,9 @@ class PriorityI2CLock:
             self._waiting[priority] += 1
             while not self._can_acquire(priority):
                 if not self._cond.wait(timeout=1.0):
-                    _logger.warning("I2C lock wait timeout (1s) for priority %d, retrying", priority)
+                    _logger.warning(
+                        "I2C lock wait timeout (1s) for priority %d, retrying", priority
+                    )
             self._waiting[priority] -= 1
             self._busy = True
 

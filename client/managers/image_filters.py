@@ -29,7 +29,7 @@ from typing import Dict, List, Optional
 import cv2
 import numpy as np
 
-from .simple_logger import debug, error, info, warn
+from .simple_logger import error, info, warn
 
 # Tenta importar CuPy para aceleração GPU
 GPU_AVAILABLE = False
@@ -397,7 +397,10 @@ class ImageFilters:
 
     def get_current_filter_info(self) -> Dict:
         """Retorna informações do filtro atual"""
-        filter_info = {"key": self.current_filter, **self.FILTERS.get(self.current_filter, {})}
+        filter_info = {
+            "key": self.current_filter,
+            **self.FILTERS.get(self.current_filter, {}),
+        }
         if self.use_gpu:
             filter_info["gpu"] = True
         return filter_info

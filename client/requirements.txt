@@ -81,3 +81,11 @@ matplotlib>=3.7.0
 #   CUDA 11.x: pip install cupy-cuda11x
 #
 # Se nao tiver GPU/CUDA, o sistema usa CPU automaticamente
+
+# ============================================================================
+# FERRAMENTAS DE DESENVOLVIMENTO (lint + format)
+# ============================================================================
+# ruff:  linter rapido (substitui flake8/isort) -> ruff check --fix
+# black: formatador padrao -> black .
+ruff>=0.15.0
+black>=26.0.0

@@ -34,7 +34,6 @@ import threading
 import time
 from typing import Any, Dict, Optional
 
-import subprocess
 
 import numpy as np
 
@@ -47,7 +46,7 @@ class NetworkManager:
     # Constantes de fragmentação
     FRAG_MAGIC = 0x46524147  # "FRAG" em ASCII hex
     MAX_PACKET_SIZE = 60000  # Tamanho máximo seguro para UDP (< 65507)
-    FRAG_HEADER_SIZE = 12    # 4 (magic) + 4 (frame_id) + 2 (chunk_idx) + 2 (total_chunks)
+    FRAG_HEADER_SIZE = 12  # 4 (magic) + 4 (frame_id) + 2 (chunk_idx) + 2 (total_chunks)
 
     def __init__(
         self,
@@ -182,7 +181,11 @@ class NetworkManager:
                 # Recebe dados de qualquer cliente
                 data, addr = self.receive_socket.recvfrom(self.buffer_size)
                 client_ip, client_port = addr
-                debug(f"Comando recebido de {client_ip}:{client_port}: {data}", "NET", rate_limit=1.0)
+                debug(
+                    f"Comando recebido de {client_ip}:{client_port}: {data}",
+                    "NET",
+                    rate_limit=1.0,
+                )
 
                 # Processa o comando recebido
                 self._process_client_command(data, client_ip, client_port)
@@ -570,11 +573,7 @@ class NetworkManager:
                     # Monta cabeçalho do fragmento
                     # I = unsigned int (4 bytes), H = unsigned short (2 bytes)
                     header = struct.pack(
-                        "<IIHH",
-                        self.FRAG_MAGIC,
-                        frame_id,
-                        chunk_idx,
-                        total_chunks
+                        "<IIHH", self.FRAG_MAGIC, frame_id, chunk_idx, total_chunks
                     )
 
                     fragment = header + chunk_data
@@ -585,7 +584,11 @@ class NetworkManager:
                         )
                         total_bytes += len(fragment)
                     except Exception as e:
-                        warn(f"Erro ao enviar fragmento {chunk_idx}/{total_chunks} para {client_ip}: {e}", "NET", rate_limit=5.0)
+                        warn(
+                            f"Erro ao enviar fragmento {chunk_idx}/{total_chunks} para {client_ip}: {e}",
+                            "NET",
+                            rate_limit=5.0,
+                        )
                         client_success = False
                         break
 

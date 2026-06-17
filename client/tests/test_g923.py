@@ -129,7 +129,9 @@ def find_g923():
     else:
         print("\nFALHA: G923 não encontrado")
         print("  - Verifique se o volante está plugado via USB")
-        print("  - Rode: sudo usb_modeswitch -v 046d -p c26d -M 0f00010142 -C 0x03 -m 01 -r 81")
+        print(
+            "  - Rode: sudo usb_modeswitch -v 046d -p c26d -M 0f00010142 -C 0x03 -m 01 -r 81"
+        )
 
     return g923
 
@@ -140,7 +142,7 @@ def test_capabilities(dev):
     print("TESTE 2: Capabilities")
     print("=" * 60)
 
-    caps = dev.capabilities(verbose=True)
+    dev.capabilities(verbose=True)
 
     # Eixos (EV_ABS)
     abs_caps = dev.capabilities().get(ecodes.EV_ABS, [])
@@ -156,8 +158,10 @@ def test_capabilities(dev):
             role = " → BRAKE"
         elif code == ecodes.ABS_RZ:
             role = " → (não usado nesta versão)"
-        print(f"  {name} (code={code}): min={info.min}, max={info.max}, "
-              f"flat={info.flat}, fuzz={info.fuzz}{role}")
+        print(
+            f"  {name} (code={code}): min={info.min}, max={info.max}, "
+            f"flat={info.flat}, fuzz={info.fuzz}{role}"
+        )
 
     # Botões (EV_KEY)
     key_caps = dev.capabilities().get(ecodes.EV_KEY, [])
@@ -223,18 +227,24 @@ def test_input_reading(dev):
                 if code == ecodes.ABS_X:
                     steer_min = min(steer_min, val)
                     steer_max = max(steer_max, val)
-                    print(f"  [{elapsed:5.1f}s] STEERING: {val} "
-                          f"(range visto: {steer_min}-{steer_max})")
+                    print(
+                        f"  [{elapsed:5.1f}s] STEERING: {val} "
+                        f"(range visto: {steer_min}-{steer_max})"
+                    )
                 elif code == ecodes.ABS_Y:
                     throttle_min = min(throttle_min, val)
                     throttle_max = max(throttle_max, val)
-                    print(f"  [{elapsed:5.1f}s] THROTTLE: {val} "
-                          f"(range visto: {throttle_min}-{throttle_max})")
+                    print(
+                        f"  [{elapsed:5.1f}s] THROTTLE: {val} "
+                        f"(range visto: {throttle_min}-{throttle_max})"
+                    )
                 elif code == ecodes.ABS_Z:
                     brake_min = min(brake_min, val)
                     brake_max = max(brake_max, val)
-                    print(f"  [{elapsed:5.1f}s] BRAKE:    {val} "
-                          f"(range visto: {brake_min}-{brake_max})")
+                    print(
+                        f"  [{elapsed:5.1f}s] BRAKE:    {val} "
+                        f"(range visto: {brake_min}-{brake_max})"
+                    )
                 elif code == ecodes.ABS_RZ:
                     print(f"  [{elapsed:5.1f}s] ABS_RZ:   {val} (não usado)")
 
@@ -283,7 +293,9 @@ def test_force_feedback(dev):
     try:
         st = os.stat(dev.path)
         mode = st.st_mode
-        print(f"  Permissões: {oct(mode)[-3:]} (escrita grupo: {bool(mode & stat.S_IWGRP)})")
+        print(
+            f"  Permissões: {oct(mode)[-3:]} (escrita grupo: {bool(mode & stat.S_IWGRP)})"
+        )
         print(f"  fd: {dev.fd}")
     except Exception as e:
         print(f"  Erro ao verificar permissões: {e}")
@@ -339,6 +351,7 @@ def test_force_feedback(dev):
         dev.write(ecodes.EV_FF, ecodes.FF_AUTOCENTER, 0xFFFF)
         print("      Ativo! Tente mover o volante - deve resistir ao centro")
         return 0  # sem effect_id, retorna dummy
+
     results["A"] = run_ff_test("A", test_a, "FF_AUTOCENTER (centralização)")
     try:
         dev.write(ecodes.EV_FF, ecodes.FF_AUTOCENTER, 0)
@@ -359,56 +372,84 @@ def test_force_feedback(dev):
     def test_c():
         level = int(32767 * 0.08)  # 8% = 2621
         eff = ff.Effect(
-            ecodes.FF_CONSTANT, -1, 0xC000,
-            ff.Trigger(0, 0), ff.Replay(0xFFFF, 0),
-            ff.EffectType(ff_constant_effect=ff.Constant(level, ff.Envelope(0, 0, 0, 0))),
+            ecodes.FF_CONSTANT,
+            -1,
+            0xC000,
+            ff.Trigger(0, 0),
+            ff.Replay(0xFFFF, 0),
+            ff.EffectType(
+                ff_constant_effect=ff.Constant(level, ff.Envelope(0, 0, 0, 0))
+            ),
         )
         eid = dev.upload_effect(eff)
         dev.write(ecodes.EV_FF, eid, 1)
         print(f"      Ativo (id={eid})! Deve puxar para a DIREITA (8%, level={level})")
         return eid
+
     results["C"] = run_ff_test("C", test_c, "FF_CONSTANT direita (8%)")
 
     # ---- TESTE D: FF_CONSTANT esquerda (8%) ----
     def test_d():
         level = int(32767 * 0.08)  # 8% = 2621
         eff = ff.Effect(
-            ecodes.FF_CONSTANT, -1, 0x4000,
-            ff.Trigger(0, 0), ff.Replay(0xFFFF, 0),
-            ff.EffectType(ff_constant_effect=ff.Constant(level, ff.Envelope(0, 0, 0, 0))),
+            ecodes.FF_CONSTANT,
+            -1,
+            0x4000,
+            ff.Trigger(0, 0),
+            ff.Replay(0xFFFF, 0),
+            ff.EffectType(
+                ff_constant_effect=ff.Constant(level, ff.Envelope(0, 0, 0, 0))
+            ),
         )
         eid = dev.upload_effect(eff)
         dev.write(ecodes.EV_FF, eid, 1)
         print(f"      Ativo (id={eid})! Deve puxar para a ESQUERDA (8%, level={level})")
         return eid
+
     results["D"] = run_ff_test("D", test_d, "FF_CONSTANT esquerda (8%)")
 
     # ---- TESTE D2: FF_CONSTANT direita (15%) ----
     def test_d2():
         level = int(32767 * 0.15)  # 15% = 4915
         eff = ff.Effect(
-            ecodes.FF_CONSTANT, -1, 0xC000,
-            ff.Trigger(0, 0), ff.Replay(0xFFFF, 0),
-            ff.EffectType(ff_constant_effect=ff.Constant(level, ff.Envelope(0, 0, 0, 0))),
+            ecodes.FF_CONSTANT,
+            -1,
+            0xC000,
+            ff.Trigger(0, 0),
+            ff.Replay(0xFFFF, 0),
+            ff.EffectType(
+                ff_constant_effect=ff.Constant(level, ff.Envelope(0, 0, 0, 0))
+            ),
         )
         eid = dev.upload_effect(eff)
         dev.write(ecodes.EV_FF, eid, 1)
-        print(f"      Ativo (id={eid})! Força MODERADA para a DIREITA (15%, level={level})")
+        print(
+            f"      Ativo (id={eid})! Força MODERADA para a DIREITA (15%, level={level})"
+        )
         return eid
+
     results["D2"] = run_ff_test("D2", test_d2, "FF_CONSTANT direita (15%)")
 
     # ---- TESTE D3: FF_CONSTANT direita (30%) ----
     def test_d3():
         level = int(32767 * 0.30)  # 30% = 9830
         eff = ff.Effect(
-            ecodes.FF_CONSTANT, -1, 0xC000,
-            ff.Trigger(0, 0), ff.Replay(0xFFFF, 0),
-            ff.EffectType(ff_constant_effect=ff.Constant(level, ff.Envelope(0, 0, 0, 0))),
+            ecodes.FF_CONSTANT,
+            -1,
+            0xC000,
+            ff.Trigger(0, 0),
+            ff.Replay(0xFFFF, 0),
+            ff.EffectType(
+                ff_constant_effect=ff.Constant(level, ff.Envelope(0, 0, 0, 0))
+            ),
         )
         eid = dev.upload_effect(eff)
         dev.write(ecodes.EV_FF, eid, 1)
-        print(f"      Ativo (id={eid})! Força FORTE para a DIREITA (30%, level={level})")
+        print(
+            f"      Ativo (id={eid})! Força FORTE para a DIREITA (30%, level={level})"
+        )
         return eid
+
     results["D3"] = run_ff_test("D3", test_d3, "FF_CONSTANT direita (30%) - CUIDADO")
 
     # ---- TESTE E: FF_SPRING ----
@@ -418,14 +459,18 @@ def test_force_feedback(dev):
             ff.Condition(0, 0, 0, 0, 0, 0),
         )
         eff = ff.Effect(
-            ecodes.FF_SPRING, -1, 0,
-            ff.Trigger(0, 0), ff.Replay(0xFFFF, 0),
+            ecodes.FF_SPRING,
+            -1,
+            0,
+            ff.Trigger(0, 0),
+            ff.Replay(0xFFFF, 0),
             ff.EffectType(ff_condition_effect=cond),
         )
         eid = dev.upload_effect(eff)
         dev.write(ecodes.EV_FF, eid, 1)
         print(f"      Ativo (id={eid})! Mova o volante - deve ter resistência elástica")
         return eid
+
     results["E"] = run_ff_test("E", test_e, "FF_SPRING (mola de centralização)")
 
     # ---- TESTE F: FF_DAMPER ----
@@ -435,24 +480,35 @@ def test_force_feedback(dev):
             ff.Condition(0, 0, 0, 0, 0, 0),
         )
         eff = ff.Effect(
-            ecodes.FF_DAMPER, -1, 0,
-            ff.Trigger(0, 0), ff.Replay(0xFFFF, 0),
+            ecodes.FF_DAMPER,
+            -1,
+            0,
+            ff.Trigger(0, 0),
+            ff.Replay(0xFFFF, 0),
             ff.EffectType(ff_condition_effect=cond),
         )
         eid = dev.upload_effect(eff)
         dev.write(ecodes.EV_FF, eid, 1)
         print(f"      Ativo (id={eid})! Mova o volante - deve ter peso/amortecimento")
         return eid
+
     results["F"] = run_ff_test("F", test_f, "FF_DAMPER (amortecimento)")
 
     # ---- TESTE G: FF_PERIODIC ----
     def test_g():
         eff = ff.Effect(
-            ecodes.FF_PERIODIC, -1, 0,
-            ff.Trigger(0, 0), ff.Replay(0xFFFF, 0),
+            ecodes.FF_PERIODIC,
+            -1,
+            0,
+            ff.Trigger(0, 0),
+            ff.Replay(0xFFFF, 0),
             ff.EffectType(
                 ff_periodic_effect=ff.Periodic(
-                    ecodes.FF_SINE, 9830, 0, 0, 500,
+                    ecodes.FF_SINE,
+                    9830,
+                    0,
+                    0,
+                    500,
                     ff.Envelope(0, 0, 0, 0),
                 )
             ),
@@ -461,21 +517,24 @@ def test_force_feedback(dev):
         dev.write(ecodes.EV_FF, eid, 1)
         print(f"      Ativo (id={eid})! Deve vibrar a 2Hz")
         return eid
+
     results["G"] = run_ff_test("G", test_g, "FF_PERIODIC FF_SINE (vibração 2Hz)")
 
     # ---- TESTE H: FF_RUMBLE ----
     def test_h():
         eff = ff.Effect(
-            ecodes.FF_RUMBLE, -1, 0,
-            ff.Trigger(0, 0), ff.Replay(0xFFFF, 0),
-            ff.EffectType(
-                ff_rumble_effect=ff.Rumble(32767, 32767)
-            ),
+            ecodes.FF_RUMBLE,
+            -1,
+            0,
+            ff.Trigger(0, 0),
+            ff.Replay(0xFFFF, 0),
+            ff.EffectType(ff_rumble_effect=ff.Rumble(32767, 32767)),
         )
         eid = dev.upload_effect(eff)
         dev.write(ecodes.EV_FF, eid, 1)
         print(f"      Ativo (id={eid})! Deve tremer/vibrar")
         return eid
+
     results["H"] = run_ff_test("H", test_h, "FF_RUMBLE (rumble motor)")
 
     # Resumo
@@ -521,7 +580,9 @@ def main():
         print("TESTES CONCLUÍDOS")
         print("=" * 60)
 
-        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_g923.log")
+        log_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "test_g923.log"
+        )
         print(f"\nLog salvo em: {log_path}")
 
     finally:

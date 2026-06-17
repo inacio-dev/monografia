@@ -25,14 +25,14 @@ try:
 
     # Configurar servos - igual ao que funcionou
     front_brake_servo = servo.Servo(
-        pca.channels[3],        # Canal 3 (freio frontal)
-        min_pulse=1000,         # 1ms
-        max_pulse=2000,         # 2ms
+        pca.channels[3],  # Canal 3 (freio frontal)
+        min_pulse=1000,  # 1ms
+        max_pulse=2000,  # 2ms
     )
     rear_brake_servo = servo.Servo(
-        pca.channels[7],        # Canal 7 (freio traseiro)
-        min_pulse=1000,         # 1ms
-        max_pulse=2000,         # 2ms
+        pca.channels[7],  # Canal 7 (freio traseiro)
+        min_pulse=1000,  # 1ms
+        max_pulse=2000,  # 2ms
     )
     print("✓ Servos de freio configurados nos canais 3 e 7")
 
@@ -41,14 +41,14 @@ try:
     # Teste freio frontal com range COMPLETO: 0° a 180°
     print("\n1. Testando FREIO FRONTAL (Canal 0)")
     brake_sequence = [
-        ("Freio MÍNIMO", 0),            # Extremo mínimo
-        ("Freio leve", 30),             # Freio suave
-        ("Freio médio", 60),            # Freio moderado
-        ("Centro", 90),                 # Centro
-        ("Freio forte", 120),           # Freio intenso
-        ("Freio forte+", 150),          # Freio muito intenso
-        ("Freio MÁXIMO", 180),          # Extremo máximo
-        ("Centro", 90),                 # Volta ao centro
+        ("Freio MÍNIMO", 0),  # Extremo mínimo
+        ("Freio leve", 30),  # Freio suave
+        ("Freio médio", 60),  # Freio moderado
+        ("Centro", 90),  # Centro
+        ("Freio forte", 120),  # Freio intenso
+        ("Freio forte+", 150),  # Freio muito intenso
+        ("Freio MÁXIMO", 180),  # Extremo máximo
+        ("Centro", 90),  # Volta ao centro
     ]
 
     for description, angle in brake_sequence:
@@ -77,14 +77,14 @@ try:
 
     # Teste com ambos os freios - range COMPLETO
     combined_tests = [
-        ("Centro", 90, 90),             # Ambos no centro
-        ("Freio leve F1", 120, 110),    # Mais dianteiro (estilo F1)
-        ("Freio médio", 135, 120),      # Balanço 60/40
-        ("Freio forte", 160, 140),      # Balanço agressivo
-        ("Freio máximo", 180, 170),     # Máximo com balanço F1
-        ("Emergência TOTAL", 180, 180), # Ambos no extremo
-        ("Freio mínimo", 30, 30),       # Teste mínimo
-        ("Centro", 90, 90),             # Volta ao centro
+        ("Centro", 90, 90),  # Ambos no centro
+        ("Freio leve F1", 120, 110),  # Mais dianteiro (estilo F1)
+        ("Freio médio", 135, 120),  # Balanço 60/40
+        ("Freio forte", 160, 140),  # Balanço agressivo
+        ("Freio máximo", 180, 170),  # Máximo com balanço F1
+        ("Emergência TOTAL", 180, 180),  # Ambos no extremo
+        ("Freio mínimo", 30, 30),  # Teste mínimo
+        ("Centro", 90, 90),  # Volta ao centro
     ]
 
     for description, front_angle, rear_angle in combined_tests:
@@ -127,7 +127,7 @@ try:
 
     # Posição neutra final
     front_brake_servo.angle = 90  # Centro
-    rear_brake_servo.angle = 90   # Centro
+    rear_brake_servo.angle = 90  # Centro
     print("\n✓ Freios liberados (posição neutra: 90°)")
 
     print("\n✅ Teste concluído!")
@@ -146,7 +146,7 @@ finally:
     try:
         # Liberar freios (posição neutra)
         front_brake_servo.angle = 90  # Centro
-        rear_brake_servo.angle = 90   # Centro
+        rear_brake_servo.angle = 90  # Centro
         pca.deinit()
         print("✓ Sistema finalizado (freios na posição neutra)")
     except Exception:

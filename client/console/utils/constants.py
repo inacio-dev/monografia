@@ -24,12 +24,14 @@ MIN_LOGS_FOR_SAVE = 100
 MIN_SENSORS_FOR_SAVE = 1000
 MIN_TELEMETRY_FOR_SAVE = 100  # Pontos mínimos de telemetria para salvar
 
-# Valores padrão de Force Feedback
-FF_DAMPING_DEFAULT = 50.0
-FF_FRICTION_DEFAULT = 30.0
-FF_FILTER_DEFAULT = 40.0
-FF_SENSITIVITY_DEFAULT = 75.0
-FF_MAX_FORCE_DEFAULT = 15.0  # Limite máximo de força no motor (% do max do G923)
+# Valores padrão de Force Feedback (ajuste base para condução)
+# Max Force é o FF_GAIN global do G923: teto que escala TODOS os efeitos no
+# hardware. Com tudo a 100%, a força resultante nunca ultrapassa esse limite.
+FF_DAMPING_DEFAULT = 35.0  # Amortecimento leve: mata oscilação sem pesar o volante
+FF_FRICTION_DEFAULT = 25.0  # Atrito sutil de grip, sem mascarar o puxão de curva
+FF_FILTER_DEFAULT = 50.0  # Suaviza o jitter do BMI160 mantendo a resposta da curva
+FF_SENSITIVITY_DEFAULT = 75.0  # Preserva faixa dinâmica do puxão sem clipar cedo
+FF_MAX_FORCE_DEFAULT = 20.0  # Teto global no motor (% do max do G923; ~25% trava)
 
 # Valores padrão de controle
 BRAKE_BALANCE_DEFAULT = 60.0  # 60% dianteiro

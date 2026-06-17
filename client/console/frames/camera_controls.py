@@ -7,9 +7,9 @@ from tkinter import ttk
 
 # Alturas do container por resolução (proporcional à largura típica da UI ~1200px)
 RESOLUTION_HEIGHTS = {
-    "480p":  480,   # 640x480   - proporção 4:3
-    "720p":  540,   # 960x540   - proporção 16:9 (720p escalado)
-    "1080p": 675,   # 1200x675  - proporção 16:9 (1080p escalado)
+    "480p": 480,  # 640x480   - proporção 4:3
+    "720p": 540,  # 960x540   - proporção 16:9 (720p escalado)
+    "1080p": 675,  # 1200x675  - proporção 16:9 (1080p escalado)
 }
 
 
@@ -24,9 +24,7 @@ def create_camera_controls_frame(console, parent=None):
     if parent is None:
         parent = console.right_column
 
-    camera_frame = ttk.LabelFrame(
-        parent, text="Câmera", style="Dark.TLabelframe"
-    )
+    camera_frame = ttk.LabelFrame(parent, text="Câmera", style="Dark.TLabelframe")
     camera_frame.pack(fill=tk.X, padx=5, pady=5)
 
     # Frame interno
@@ -97,7 +95,7 @@ def _on_resolution_change(console, resolution):
             if success:
                 console.log("INFO", f"Resolução alterada para {resolution}")
             else:
-                console.log("WARN", f"Falha ao enviar comando de resolução")
+                console.log("WARN", "Falha ao enviar comando de resolução")
         else:
             console.log("WARN", "Cliente de rede não conectado")
 
@@ -117,7 +115,10 @@ def _resize_video_container(console, resolution):
         if hasattr(console, "video_container") and console.video_container:
             new_height = RESOLUTION_HEIGHTS.get(resolution, 480)
             console.video_container.config(height=new_height)
-            console.log("INFO", f"Display redimensionado para {resolution} (altura: {new_height}px)")
+            console.log(
+                "INFO",
+                f"Display redimensionado para {resolution} (altura: {new_height}px)",
+            )
     except Exception as e:
         console.log("ERROR", f"Erro ao redimensionar vídeo: {e}")
 

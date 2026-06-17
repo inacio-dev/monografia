@@ -87,13 +87,15 @@ class G923Manager:
     STEERING_DEADZONE = 1  # Percentual (-100 a +100)
 
     # Limite padrão de force feedback (% do max do motor)
-    # 25% já trava o volante no G923, então 15% é um bom padrão para uso real
+    # FF_GAIN global: escala TODOS os efeitos no hardware, então é o teto de
+    # força mesmo com os sliders a 100%. 25% já trava o volante no G923; 20% é
+    # um padrão firme com margem ao travamento.
     # Alterável via set_ff_max_percent() ou parâmetro ff_max_percent no construtor
-    FF_MAX_PERCENT_DEFAULT = 15
+    FF_MAX_PERCENT_DEFAULT = 20
 
     # Força mínima sempre ativa (simula peso mecânico do volante/eixo)
     # Mesmo com sliders em 0%, esses valores mínimos garantem realismo
-    MIN_SPRING_PCT = 5.0    # Centering mínimo (peso do eixo de direção)
+    MIN_SPRING_PCT = 5.0  # Centering mínimo (peso do eixo de direção)
     MIN_FRICTION_PCT = 3.0  # Atrito mínimo (resistência mecânica)
 
     # Batente virtual da direção (endstop)
@@ -114,11 +116,15 @@ class G923Manager:
                               formato do SerialReceiverManager
             log_callback: Função callback(nível, mensagem) para logs
             ff_max_percent: Limite máximo do force feedback (0-100%).
-                            Default: 15%. Valores acima de 25% podem travar o volante.
+                            Default: 20%. Valores acima de 25% podem travar o volante.
         """
         self.command_callback = command_callback
         self.log_callback = log_callback
-        self.ff_max_percent = ff_max_percent if ff_max_percent is not None else self.FF_MAX_PERCENT_DEFAULT
+        self.ff_max_percent = (
+            ff_max_percent
+            if ff_max_percent is not None
+            else self.FF_MAX_PERCENT_DEFAULT
+        )
 
         # Dispositivo evdev
         self.device: Optional[InputDevice] = None
@@ -330,12 +336,20 @@ class G923Manager:
             # Efeito 8: FF_CONSTANT (endstop) — batente virtual da direção
             self._ff_endstop_id = self._upload_constant_effect()
 
-            active = sum(1 for eid in [
-                self._ff_spring_id, self._ff_damper_id,
-                self._ff_friction_id, self._ff_inertia_id,
-                self._ff_constant_id, self._ff_rumble_id,
-                self._ff_periodic_id, self._ff_endstop_id,
-            ] if eid >= 0)
+            active = sum(
+                1
+                for eid in [
+                    self._ff_spring_id,
+                    self._ff_damper_id,
+                    self._ff_friction_id,
+                    self._ff_inertia_id,
+                    self._ff_constant_id,
+                    self._ff_rumble_id,
+                    self._ff_periodic_id,
+                    self._ff_endstop_id,
+                ]
+                if eid >= 0
+            )
             self._log(
                 "INFO",
                 f"Force feedback multi-efeito: {active}/8 ativos "
@@ -345,7 +359,9 @@ class G923Manager:
         except Exception as e:
             self._log("WARN", f"Erro ao inicializar force feedback: {e}")
 
-    def _upload_condition_effect(self, effect_type: int, coeff: int, saturation: int) -> int:
+    def _upload_condition_effect(
+        self, effect_type: int, coeff: int, saturation: int
+    ) -> int:
         """
         Cria e ativa um efeito condicional (spring/damper/friction).
 
@@ -363,7 +379,9 @@ class G923Manager:
                 ff.Condition(0, 0, 0, 0, 0, 0),  # eixo Y ignorado para volante
             )
             effect = ff.Effect(
-                effect_type, -1, 0,
+                effect_type,
+                -1,
+                0,
                 ff.Trigger(0, 0),
                 ff.Replay(0, 0),
                 ff.EffectType(ff_condition_effect=cond),
@@ -379,7 +397,9 @@ class G923Manager:
         """Cria e ativa efeito FF_CONSTANT com força 0 (neutro)"""
         try:
             effect = ff.Effect(
-                ecodes.FF_CONSTANT, -1, 0,
+                ecodes.FF_CONSTANT,
+                -1,
+                0,
                 ff.Trigger(0, 0),
                 ff.Replay(0, 0),
                 ff.EffectType(
@@ -403,7 +423,9 @@ class G923Manager:
         """
         try:
             effect = ff.Effect(
-                ecodes.FF_RUMBLE, -1, 0,
+                ecodes.FF_RUMBLE,
+                -1,
+                0,
                 ff.Trigger(0, 0),
                 ff.Replay(0, 0),
                 ff.EffectType(ff_rumble_effect=ff.Rumble(strong, weak)),
@@ -425,11 +447,17 @@ class G923Manager:
         """
         try:
             per = ff.Periodic(
-                ecodes.FF_SINE, max(1, period_ms), magnitude, 0, 0,
+                ecodes.FF_SINE,
+                max(1, period_ms),
+                magnitude,
+                0,
+                0,
                 ff.Envelope(0, 0, 0, 0),
             )
             effect = ff.Effect(
-                ecodes.FF_PERIODIC, -1, 0,
+                ecodes.FF_PERIODIC,
+                -1,
+                0,
                 ff.Trigger(0, 0),
                 ff.Replay(0, 0),
                 ff.EffectType(ff_periodic_effect=per),
@@ -441,8 +469,9 @@ class G923Manager:
             self._log("WARN", f"Erro ao criar efeito FF_PERIODIC: {e}")
             return -1
 
-    def _update_condition_effect(self, effect_id: int, effect_type: int,
-                                  coeff: int, saturation: int):
+    def _update_condition_effect(
+        self, effect_id: int, effect_type: int, coeff: int, saturation: int
+    ):
         """Atualiza coeficientes de um efeito condicional existente"""
         if effect_id < 0 or not self.device:
             return
@@ -452,7 +481,9 @@ class G923Manager:
                 ff.Condition(0, 0, 0, 0, 0, 0),
             )
             effect = ff.Effect(
-                effect_type, effect_id, 0,
+                effect_type,
+                effect_id,
+                0,
                 ff.Trigger(0, 0),
                 ff.Replay(0, 0),
                 ff.EffectType(ff_condition_effect=cond),
@@ -555,7 +586,9 @@ class G923Manager:
         with self._ff_lock:
             try:
                 effect = ff.Effect(
-                    ecodes.FF_RUMBLE, self._ff_rumble_id, 0,
+                    ecodes.FF_RUMBLE,
+                    self._ff_rumble_id,
+                    0,
                     ff.Trigger(0, 0),
                     ff.Replay(0, 0),
                     ff.EffectType(ff_rumble_effect=ff.Rumble(strong, weak)),
@@ -564,12 +597,14 @@ class G923Manager:
                 self._last_rumble_key = key
             except Exception:
                 effect = ff.Effect(
-                    ecodes.FF_RUMBLE, -1, 0,
+                    ecodes.FF_RUMBLE,
+                    -1,
+                    0,
                     ff.Trigger(0, 0),
                     ff.Replay(0, 0),
                     ff.EffectType(ff_rumble_effect=ff.Rumble(strong, weak)),
                 )
-                self._recreate_effect('_ff_rumble_id', effect)
+                self._recreate_effect("_ff_rumble_id", effect)
                 self._last_rumble_key = key
 
     def update_periodic(self, period_ms: int, magnitude_pct: float):
@@ -582,12 +617,18 @@ class G923Manager:
             return
         with self._ff_lock:
             per = ff.Periodic(
-                ecodes.FF_SINE, key[0], mag, 0, 0,
+                ecodes.FF_SINE,
+                key[0],
+                mag,
+                0,
+                0,
                 ff.Envelope(0, 0, 0, 0),
             )
             try:
                 effect = ff.Effect(
-                    ecodes.FF_PERIODIC, self._ff_periodic_id, 0,
+                    ecodes.FF_PERIODIC,
+                    self._ff_periodic_id,
+                    0,
                     ff.Trigger(0, 0),
                     ff.Replay(0, 0),
                     ff.EffectType(ff_periodic_effect=per),
@@ -596,12 +637,14 @@ class G923Manager:
                 self._last_periodic_key = key
             except Exception:
                 effect = ff.Effect(
-                    ecodes.FF_PERIODIC, -1, 0,
+                    ecodes.FF_PERIODIC,
+                    -1,
+                    0,
                     ff.Trigger(0, 0),
                     ff.Replay(0, 0),
                     ff.EffectType(ff_periodic_effect=per),
                 )
-                self._recreate_effect('_ff_periodic_id', effect)
+                self._recreate_effect("_ff_periodic_id", effect)
                 self._last_periodic_key = key
 
     def apply_constant_force(self, intensity: float, direction: str):
@@ -634,13 +677,13 @@ class G923Manager:
         with self._ff_lock:
             try:
                 effect = ff.Effect(
-                    ecodes.FF_CONSTANT, self._ff_constant_id, ff_direction,
+                    ecodes.FF_CONSTANT,
+                    self._ff_constant_id,
+                    ff_direction,
                     ff.Trigger(0, 0),
                     ff.Replay(0, 0),
                     ff.EffectType(
-                        ff_constant_effect=ff.Constant(
-                            level, ff.Envelope(0, 0, 0, 0)
-                        )
+                        ff_constant_effect=ff.Constant(level, ff.Envelope(0, 0, 0, 0))
                     ),
                 )
                 self.device.upload_effect(effect)
@@ -648,16 +691,16 @@ class G923Manager:
             except Exception:
                 # Fallback: recreate se upload in-place falhar
                 effect = ff.Effect(
-                    ecodes.FF_CONSTANT, -1, ff_direction,
+                    ecodes.FF_CONSTANT,
+                    -1,
+                    ff_direction,
                     ff.Trigger(0, 0),
                     ff.Replay(0, 0),
                     ff.EffectType(
-                        ff_constant_effect=ff.Constant(
-                            level, ff.Envelope(0, 0, 0, 0)
-                        )
+                        ff_constant_effect=ff.Constant(level, ff.Envelope(0, 0, 0, 0))
                     ),
                 )
-                self._recreate_effect('_ff_constant_id', effect)
+                self._recreate_effect("_ff_constant_id", effect)
                 self._last_constant_key = key
 
     def _update_endstop(self):
@@ -711,16 +754,16 @@ class G923Manager:
 
         with self._ff_lock:
             effect = ff.Effect(
-                ecodes.FF_CONSTANT, -1, ff_direction,
+                ecodes.FF_CONSTANT,
+                -1,
+                ff_direction,
                 ff.Trigger(0, 0),
                 ff.Replay(0, 0),
                 ff.EffectType(
-                    ff_constant_effect=ff.Constant(
-                        level, ff.Envelope(0, 0, 0, 0)
-                    )
+                    ff_constant_effect=ff.Constant(level, ff.Envelope(0, 0, 0, 0))
                 ),
             )
-            self._recreate_effect('_ff_endstop_id', effect)
+            self._recreate_effect("_ff_endstop_id", effect)
 
     def disable_endstop(self):
         """Desativa endstop temporariamente (ex: durante calibração)"""

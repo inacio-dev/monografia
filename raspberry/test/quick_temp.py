@@ -50,7 +50,7 @@ def check_1wire_setup():
 def read_temperature_raw(device_path):
     """Lê dados brutos do sensor"""
     try:
-        with open(device_path + '/w1_slave', 'r') as f:
+        with open(device_path + "/w1_slave", "r") as f:
             lines = f.readlines()
         return lines
     except Exception as e:
@@ -64,13 +64,13 @@ def parse_temperature(lines):
         return None
 
     # Verifica se leitura é válida
-    if lines[0].strip()[-3:] != 'YES':
+    if lines[0].strip()[-3:] != "YES":
         return None
 
     # Extrai temperatura
-    temp_pos = lines[1].find('t=')
+    temp_pos = lines[1].find("t=")
     if temp_pos != -1:
-        temp_string = lines[1][temp_pos+2:]
+        temp_string = lines[1][temp_pos + 2 :]
         temp_c = float(temp_string) / 1000.0
         return temp_c
 
@@ -131,7 +131,7 @@ def main():
                 temperatures.append(temp_c)
 
                 # Converte para outras unidades
-                temp_f = (temp_c * 9/5) + 32
+                temp_f = (temp_c * 9 / 5) + 32
                 temp_k = temp_c + 273.15
 
                 # Status térmico
@@ -141,9 +141,11 @@ def main():
                 timestamp = datetime.now().strftime("%H:%M:%S")
 
                 # Exibe leitura
-                print(f"[{timestamp}] #{reading_count:3d} | "
-                      f"{temp_c:6.2f}°C | {temp_f:6.1f}°F | {temp_k:6.1f}K | "
-                      f"{emoji} {status}")
+                print(
+                    f"[{timestamp}] #{reading_count:3d} | "
+                    f"{temp_c:6.2f}°C | {temp_f:6.1f}°F | {temp_k:6.1f}K | "
+                    f"{emoji} {status}"
+                )
 
                 # Detecta mudanças bruscas
                 if len(temperatures) >= 2:
@@ -156,9 +158,11 @@ def main():
                     temp_min = min(temperatures)
                     temp_max = max(temperatures)
                     temp_avg = sum(temperatures) / len(temperatures)
-                    print(f"    📊 Min: {temp_min:.1f}°C | "
-                          f"Max: {temp_max:.1f}°C | "
-                          f"Média: {temp_avg:.1f}°C")
+                    print(
+                        f"    📊 Min: {temp_min:.1f}°C | "
+                        f"Max: {temp_max:.1f}°C | "
+                        f"Média: {temp_avg:.1f}°C"
+                    )
 
             else:
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] ❌ Falha na leitura")

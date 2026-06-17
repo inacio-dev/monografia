@@ -53,7 +53,6 @@ class MotorManager:
     MOTOR_MIN_RPM = 600  # RPM mínimo estável
     MOTOR_IDLE_RPM = 800  # RPM marcha lenta
 
-
     def __init__(
         self,
         rpwm_pin: int = None,
@@ -111,7 +110,10 @@ class MotorManager:
         Returns:
             bool: True se inicializado com sucesso
         """
-        info(f"Inicializando motor BTS7960 | PWM=GPIO{self.rpwm_pin} R_EN=GPIO{self.r_en_pin} L_EN=GPIO{self.l_en_pin} | 5 marchas", "MOTOR")
+        info(
+            f"Inicializando motor BTS7960 | PWM=GPIO{self.rpwm_pin} R_EN=GPIO{self.r_en_pin} L_EN=GPIO{self.l_en_pin} | 5 marchas",
+            "MOTOR",
+        )
 
         try:
             # Configura GPIO
@@ -139,16 +141,25 @@ class MotorManager:
             self.is_initialized = True
 
             if self.current_gear > 5:
-                warn(f"Marcha {self.current_gear}ª inválida - redefinindo para 1ª", "MOTOR")
+                warn(
+                    f"Marcha {self.current_gear}ª inválida - redefinindo para 1ª",
+                    "MOTOR",
+                )
                 self.current_gear = 1
 
             self._start_acceleration_thread()
-            info(f"Motor inicializado | PWM: {self.PWM_FREQUENCY}Hz | Marcha: {self.current_gear}ª", "MOTOR")
+            info(
+                f"Motor inicializado | PWM: {self.PWM_FREQUENCY}Hz | Marcha: {self.current_gear}ª",
+                "MOTOR",
+            )
 
             return True
 
         except Exception as e:
-            error(f"Erro ao inicializar motor: {e} | Verifique: BTS7960, alimentação 12V, GPIO", "MOTOR")
+            error(
+                f"Erro ao inicializar motor: {e} | Verifique: BTS7960, alimentação 12V, GPIO",
+                "MOTOR",
+            )
 
             self.is_initialized = False
             return False
@@ -164,7 +175,10 @@ class MotorManager:
 
     def _acceleration_loop(self):
         """Loop principal de controle de aceleração e RPM"""
-        debug(f"Thread loop iniciado (should_stop={self.should_stop}, is_initialized={self.is_initialized})", "MOTOR")
+        debug(
+            f"Thread loop iniciado (should_stop={self.should_stop}, is_initialized={self.is_initialized})",
+            "MOTOR",
+        )
         while not self.should_stop and self.is_initialized:
             try:
                 current_time = time.time()
@@ -198,9 +212,14 @@ class MotorManager:
 
         # Recalcula target PWM com novo limitador da marcha
         if self.last_throttle_percent > 0:
-            self.target_pwm = self._calculate_intelligent_pwm(self.last_throttle_percent)
+            self.target_pwm = self._calculate_intelligent_pwm(
+                self.last_throttle_percent
+            )
 
-        info(f"Marcha: {old_gear}ª → {new_gear}ª (PWM target: {self.target_pwm:.1f}%)", "MOTOR")
+        info(
+            f"Marcha: {old_gear}ª → {new_gear}ª (PWM target: {self.target_pwm:.1f}%)",
+            "MOTOR",
+        )
 
     def _apply_motor_pwm(self):
         """Aplica PWM ao motor via ponte H"""
@@ -270,7 +289,10 @@ class MotorManager:
         now = time.time()
         if now - self._last_throttle_log >= 1.0 and throttle_percent > 0:
             self._last_throttle_log = now
-            debug(f"Throttle: {throttle_percent}% → PWM: {intelligent_pwm:.1f}% (marcha: {self.current_gear}ª)", "MOTOR")
+            debug(
+                f"Throttle: {throttle_percent}% → PWM: {intelligent_pwm:.1f}% (marcha: {self.current_gear}ª)",
+                "MOTOR",
+            )
 
         # Log removido daqui - será feito no main.py com todos os dados
 
@@ -305,11 +327,11 @@ class MotorManager:
 
     GEAR_PARAMS = {
         # gear: (limiter, ideal_low, ideal_high, τ_base)
-        1: (20,    0,  14,  2.0),  # 1ª: ideal 0-14%
-        2: (40,   12,  30,  4.0),  # 2ª: ideal 12-30% (sobrepõe 1ª)
-        3: (60,   24,  50,  6.0),  # 3ª: ideal 24-50% (sobrepõe 2ª)
-        4: (80,   44,  70,  8.0),  # 4ª: ideal 44-70% (sobrepõe 3ª)
-        5: (100,  64,  96, 10.0),  # 5ª: ideal 64-96% (sobrepõe 4ª)
+        1: (20, 0, 14, 2.0),  # 1ª: ideal 0-14%
+        2: (40, 12, 30, 4.0),  # 2ª: ideal 12-30% (sobrepõe 1ª)
+        3: (60, 24, 50, 6.0),  # 3ª: ideal 24-50% (sobrepõe 2ª)
+        4: (80, 44, 70, 8.0),  # 4ª: ideal 44-70% (sobrepõe 3ª)
+        5: (100, 64, 96, 10.0),  # 5ª: ideal 64-96% (sobrepõe 4ª)
     }
 
     # Multiplicadores de τ por zona (quanto maior, mais lento)
@@ -461,7 +483,10 @@ class MotorManager:
             self.last_zone_check = now
             if abs(pwm_diff) > 0.5:
                 action = "ACCEL" if pwm_diff > 0 else "DECEL"
-                debug(f"F1: {zone} τ={tau:.1f}s | PWM {self.current_pwm:.1f}%→{self.target_pwm:.1f}% | {action}", "MOTOR")
+                debug(
+                    f"F1: {zone} τ={tau:.1f}s | PWM {self.current_pwm:.1f}%→{self.target_pwm:.1f}% | {action}",
+                    "MOTOR",
+                )
 
     def emergency_stop(self):
         """Para motor imediatamente"""
@@ -515,14 +540,10 @@ class MotorManager:
                 "current_gear": self.current_gear,
                 "efficiency_zone": self.efficiency_zone,
                 # === CONTA-GIROS ===
-                "rpm_display": round(
-                    self._tachometer_percent(self.current_pwm), 0
-                ),
+                "rpm_display": round(self._tachometer_percent(self.current_pwm), 0),
                 "max_rpm": self.MOTOR_MAX_RPM,
                 "idle_rpm": self.MOTOR_IDLE_RPM,
-                "rpm_percent": round(
-                    self._tachometer_percent(self.current_pwm), 1
-                ),
+                "rpm_percent": round(self._tachometer_percent(self.current_pwm), 1),
                 # === STATUS TÉCNICO ===
                 "is_initialized": self.is_initialized,
                 # === HARDWARE ===

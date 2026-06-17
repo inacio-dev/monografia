@@ -6,6 +6,7 @@ Teste direto do BMI160 para encontrar delay ideal
 import smbus2
 import time
 
+
 def test_delay_optimization():
     """Teste para encontrar o delay ideal para comunicação I2C com BMI160"""
     print("=== TESTE DE OTIMIZAÇÃO DE DELAY BMI160 ===")
@@ -92,12 +93,14 @@ def test_delay_optimization():
 
     bus.close()
 
+
 def bytes_to_int16(lsb, msb):
     """Converte 2 bytes para int16 com sinal (complemento de 2)"""
     value = (msb << 8) | lsb
     if value >= 32768:  # Se bit de sinal estiver setado
         value -= 65536
     return value
+
 
 def test_bmi160_complete():
     print("=== TESTE COMPLETO BMI160 ===")
@@ -143,8 +146,12 @@ def test_bmi160_complete():
         accel_mode = (pmu_status >> 4) & 0x03
         gyro_mode = (pmu_status >> 2) & 0x03
 
-        print(f"  Accel: {accel_mode} ({'suspend' if accel_mode == 0 else 'normal' if accel_mode == 1 else 'low-power' if accel_mode == 2 else 'unknown'})")
-        print(f"  Gyro: {gyro_mode} ({'suspend' if gyro_mode == 0 else 'normal' if gyro_mode == 1 else 'fast-startup' if gyro_mode == 3 else 'unknown'})")
+        print(
+            f"  Accel: {accel_mode} ({'suspend' if accel_mode == 0 else 'normal' if accel_mode == 1 else 'low-power' if accel_mode == 2 else 'unknown'})"
+        )
+        print(
+            f"  Gyro: {gyro_mode} ({'suspend' if gyro_mode == 0 else 'normal' if gyro_mode == 1 else 'fast-startup' if gyro_mode == 3 else 'unknown'})"
+        )
     except Exception as e:
         print(f"❌ Erro ao ler PMU: {e}")
 
@@ -174,8 +181,12 @@ def test_bmi160_complete():
         accel_mode = (pmu_status >> 4) & 0x03
         gyro_mode = (pmu_status >> 2) & 0x03
 
-        print(f"  Accel: {accel_mode} ({'suspend' if accel_mode == 0 else 'normal' if accel_mode == 1 else 'low-power' if accel_mode == 2 else 'unknown'})")
-        print(f"  Gyro: {gyro_mode} ({'suspend' if gyro_mode == 0 else 'normal' if gyro_mode == 1 else 'fast-startup' if gyro_mode == 3 else 'unknown'})")
+        print(
+            f"  Accel: {accel_mode} ({'suspend' if accel_mode == 0 else 'normal' if accel_mode == 1 else 'low-power' if accel_mode == 2 else 'unknown'})"
+        )
+        print(
+            f"  Gyro: {gyro_mode} ({'suspend' if gyro_mode == 0 else 'normal' if gyro_mode == 1 else 'fast-startup' if gyro_mode == 3 else 'unknown'})"
+        )
 
         if accel_mode == 1 and gyro_mode == 1:
             print("✓ Ambos sensores ativados com sucesso!")
@@ -218,7 +229,9 @@ def test_bmi160_complete():
         # Verificar configuração
         acc_conf_read = read_reg_safe(0x40)
         gyr_conf_read = read_reg_safe(0x42)
-        print(f"  Confirmação - ACC_CONF: 0x{acc_conf_read:02X}, GYR_CONF: 0x{gyr_conf_read:02X}")
+        print(
+            f"  Confirmação - ACC_CONF: 0x{acc_conf_read:02X}, GYR_CONF: 0x{gyr_conf_read:02X}"
+        )
 
     except Exception as e:
         print(f"❌ Erro ao configurar ODR: {e}")
@@ -268,11 +281,15 @@ def test_bmi160_complete():
             gyro_y_dps = gyro_y * gyro_scale
             gyro_z_dps = gyro_z * gyro_scale
 
-            print(f"  Accel (g): X={accel_x_g:6.3f} Y={accel_y_g:6.3f} Z={accel_z_g:6.3f}")
-            print(f"  Gyro(°/s): X={gyro_x_dps:6.1f} Y={gyro_y_dps:6.1f} Z={gyro_z_dps:6.1f}")
+            print(
+                f"  Accel (g): X={accel_x_g:6.3f} Y={accel_y_g:6.3f} Z={accel_z_g:6.3f}"
+            )
+            print(
+                f"  Gyro(°/s): X={gyro_x_dps:6.1f} Y={gyro_y_dps:6.1f} Z={gyro_z_dps:6.1f}"
+            )
 
             # Verificar se dados fazem sentido
-            total_g = (accel_x_g**2 + accel_y_g**2 + accel_z_g**2)**0.5
+            total_g = (accel_x_g**2 + accel_y_g**2 + accel_z_g**2) ** 0.5
             print(f"  Magnitude total: {total_g:.3f}g (esperado ~1.0g em repouso)")
 
             time.sleep(0.2)
@@ -299,6 +316,7 @@ def test_bmi160_complete():
     bus.close()
     print("\n=== TESTE COMPLETO FINALIZADO ===")
     return True
+
 
 def test_bmi160_complete_optimized(delay_ms):
     """Teste completo do BMI160 usando delay otimizado"""
@@ -345,8 +363,12 @@ def test_bmi160_complete_optimized(delay_ms):
         accel_mode = (pmu_status >> 4) & 0x03
         gyro_mode = (pmu_status >> 2) & 0x03
 
-        print(f"  Accel: {accel_mode} ({'suspend' if accel_mode == 0 else 'normal' if accel_mode == 1 else 'low-power' if accel_mode == 2 else 'unknown'})")
-        print(f"  Gyro: {gyro_mode} ({'suspend' if gyro_mode == 0 else 'normal' if gyro_mode == 1 else 'fast-startup' if gyro_mode == 3 else 'unknown'})")
+        print(
+            f"  Accel: {accel_mode} ({'suspend' if accel_mode == 0 else 'normal' if accel_mode == 1 else 'low-power' if accel_mode == 2 else 'unknown'})"
+        )
+        print(
+            f"  Gyro: {gyro_mode} ({'suspend' if gyro_mode == 0 else 'normal' if gyro_mode == 1 else 'fast-startup' if gyro_mode == 3 else 'unknown'})"
+        )
     except Exception as e:
         print(f"❌ Erro ao ler PMU: {e}")
 
@@ -376,8 +398,12 @@ def test_bmi160_complete_optimized(delay_ms):
         accel_mode = (pmu_status >> 4) & 0x03
         gyro_mode = (pmu_status >> 2) & 0x03
 
-        print(f"  Accel: {accel_mode} ({'suspend' if accel_mode == 0 else 'normal' if accel_mode == 1 else 'low-power' if accel_mode == 2 else 'unknown'})")
-        print(f"  Gyro: {gyro_mode} ({'suspend' if gyro_mode == 0 else 'normal' if gyro_mode == 1 else 'fast-startup' if gyro_mode == 3 else 'unknown'})")
+        print(
+            f"  Accel: {accel_mode} ({'suspend' if accel_mode == 0 else 'normal' if accel_mode == 1 else 'low-power' if accel_mode == 2 else 'unknown'})"
+        )
+        print(
+            f"  Gyro: {gyro_mode} ({'suspend' if gyro_mode == 0 else 'normal' if gyro_mode == 1 else 'fast-startup' if gyro_mode == 3 else 'unknown'})"
+        )
 
         if accel_mode == 1 and gyro_mode == 1:
             print("✓ Ambos sensores ativados com sucesso!")
@@ -420,7 +446,9 @@ def test_bmi160_complete_optimized(delay_ms):
         # Verificar configuração
         acc_conf_read = read_reg_safe(0x40)
         gyr_conf_read = read_reg_safe(0x42)
-        print(f"  Confirmação - ACC_CONF: 0x{acc_conf_read:02X}, GYR_CONF: 0x{gyr_conf_read:02X}")
+        print(
+            f"  Confirmação - ACC_CONF: 0x{acc_conf_read:02X}, GYR_CONF: 0x{gyr_conf_read:02X}"
+        )
 
     except Exception as e:
         print(f"❌ Erro ao configurar ODR: {e}")
@@ -470,11 +498,15 @@ def test_bmi160_complete_optimized(delay_ms):
             gyro_y_dps = gyro_y * gyro_scale
             gyro_z_dps = gyro_z * gyro_scale
 
-            print(f"  Accel (g): X={accel_x_g:6.3f} Y={accel_y_g:6.3f} Z={accel_z_g:6.3f}")
-            print(f"  Gyro(°/s): X={gyro_x_dps:6.1f} Y={gyro_y_dps:6.1f} Z={gyro_z_dps:6.1f}")
+            print(
+                f"  Accel (g): X={accel_x_g:6.3f} Y={accel_y_g:6.3f} Z={accel_z_g:6.3f}"
+            )
+            print(
+                f"  Gyro(°/s): X={gyro_x_dps:6.1f} Y={gyro_y_dps:6.1f} Z={gyro_z_dps:6.1f}"
+            )
 
             # Verificar se dados fazem sentido
-            total_g = (accel_x_g**2 + accel_y_g**2 + accel_z_g**2)**0.5
+            total_g = (accel_x_g**2 + accel_y_g**2 + accel_z_g**2) ** 0.5
             print(f"  Magnitude total: {total_g:.3f}g (esperado ~1.0g em repouso)")
 
             time.sleep(0.2)
@@ -501,6 +533,8 @@ def test_bmi160_complete_optimized(delay_ms):
     bus.close()
     print("\n=== TESTE COMPLETO FINALIZADO ===")
     return True
+
+
 if __name__ == "__main__":
     # Primeiro, testar delays
     optimal_delay = test_delay_optimization()
@@ -510,9 +544,9 @@ if __name__ == "__main__":
         print("Agora vamos testar comunicação completa com este delay!")
 
         # Atualizar função completa para usar o delay otimizado
-        print("\n" + "="*50)
+        print("\n" + "=" * 50)
         print("INICIANDO TESTE COMPLETO COM DELAY OTIMIZADO")
-        print("="*50)
+        print("=" * 50)
 
         # Testar comunicação completa
         test_bmi160_complete_optimized(optimal_delay)

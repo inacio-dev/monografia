@@ -321,7 +321,10 @@ class BMI160Manager:
                             self._error_count = 0
 
                         if self._error_count % 50 == 0:
-                            warn(f"I2C Error (erro #{self._error_count}): reg 0x{start_reg:02X}", "BMI160")
+                            warn(
+                                f"I2C Error (erro #{self._error_count}): reg 0x{start_reg:02X}",
+                                "BMI160",
+                            )
 
                         return [0] * num_bytes
                 else:
@@ -342,7 +345,10 @@ class BMI160Manager:
         Returns:
             bool: True se inicializado com sucesso
         """
-        info(f"Inicializando BMI160 | I2C: 0x{self.i2c_address:02X} | Accel: ±{self._get_accel_range_g()}g | Gyro: ±{self._get_gyro_range_dps()}°/s | {self.sample_rate}Hz", "BMI160")
+        info(
+            f"Inicializando BMI160 | I2C: 0x{self.i2c_address:02X} | Accel: ±{self._get_accel_range_g()}g | Gyro: ±{self._get_gyro_range_dps()}°/s | {self.sample_rate}Hz",
+            "BMI160",
+        )
 
         try:
             # 1. Tentar inicializar I2C real
@@ -350,7 +356,9 @@ class BMI160Manager:
                 self.i2c_bus = smbus2.SMBus(1)
                 info("I2C inicializado com smbus2", "BMI160")
             except Exception as e:
-                error(f"Erro ao inicializar I2C: {e} - hardware I2C obrigatório", "BMI160")
+                error(
+                    f"Erro ao inicializar I2C: {e} - hardware I2C obrigatório", "BMI160"
+                )
                 return False
 
             # 2. Verificar CHIP_ID (deve ser 0xD1)
@@ -359,7 +367,10 @@ class BMI160Manager:
                 error("Erro ao ler CHIP_ID - sensor não responde", "BMI160")
                 return False
             if chip_id != self.CHIP_ID_BMI160:
-                error(f"CHIP_ID incorreto: 0x{chip_id:02X} (esperado: 0x{self.CHIP_ID_BMI160:02X})", "BMI160")
+                error(
+                    f"CHIP_ID incorreto: 0x{chip_id:02X} (esperado: 0x{self.CHIP_ID_BMI160:02X})",
+                    "BMI160",
+                )
                 return False
 
             info(f"CHIP_ID verificado: 0x{chip_id:02X}", "BMI160")
@@ -383,7 +394,10 @@ class BMI160Manager:
                 time.sleep(0.1)
 
             if chip_id_after_reset != self.CHIP_ID_BMI160:
-                warn(f"CHIP_ID após reset: 0x{chip_id_after_reset if chip_id_after_reset else 'None'} - continuando", "BMI160")
+                warn(
+                    f"CHIP_ID após reset: 0x{chip_id_after_reset if chip_id_after_reset else 'None'} - continuando",
+                    "BMI160",
+                )
             else:
                 debug("Sensor OK após reset", "BMI160")
 
@@ -507,7 +521,10 @@ class BMI160Manager:
                 self._consecutive_zeros = 0
                 return True
             else:
-                warn("BMI160: PMU re-ativado mas ainda zerado, tentando soft reset...", "BMI160")
+                warn(
+                    "BMI160: PMU re-ativado mas ainda zerado, tentando soft reset...",
+                    "BMI160",
+                )
                 self._write_register(self.REG_CMD, self.CMD_SOFT_RESET)
                 time.sleep(0.100)  # 55ms spec + margem
                 self._write_register(self.REG_CMD, self.CMD_ACC_SET_PMU_MODE)
@@ -548,7 +565,9 @@ class BMI160Manager:
                 self._last_gyro_data = list(gyro_data)
 
             # Watchdog: detecta brown-out (todos bytes zero = sensor em suspend)
-            all_zero = all(b == 0 for b in accel_data) and all(b == 0 for b in gyro_data)
+            all_zero = all(b == 0 for b in accel_data) and all(
+                b == 0 for b in gyro_data
+            )
             if all_zero:
                 self._consecutive_zeros += 1
                 if self._consecutive_zeros >= self._ZERO_THRESHOLD:

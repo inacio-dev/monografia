@@ -123,7 +123,9 @@ class BrakeManager:
     # STEERING_CHANNEL = 0     # Canal 0 do PCA9685 - Direção (usado pelo steering_manager)
 
     # Endereço I2C do PCA9685
-    PCA9685_I2C_ADDRESS = 0x41  # PCA9685 com A0 soldado (evita conflito com INA219 em 0x40)
+    PCA9685_I2C_ADDRESS = (
+        0x41  # PCA9685 com A0 soldado (evita conflito com INA219 em 0x40)
+    )
 
     # Características do servo MG996R
     PWM_FREQUENCY = 50  # 50Hz para servos
@@ -204,7 +206,10 @@ class BrakeManager:
         Returns:
             bool: True se inicializado com sucesso
         """
-        info(f"Inicializando freios | Canais: front={self.front_channel} rear={self.rear_channel} | I2C: 0x{self.pca9685_address:02X} | Balanço: {self.brake_balance:.1f}%", "BRAKE")
+        info(
+            f"Inicializando freios | Canais: front={self.front_channel} rear={self.rear_channel} | I2C: 0x{self.pca9685_address:02X} | Balanço: {self.brake_balance:.1f}%",
+            "BRAKE",
+        )
 
         try:
             # Inicializa barramento I2C
@@ -228,7 +233,10 @@ class BrakeManager:
                 min_pulse=int(self.PULSE_MIN * 1000),  # converte para microssegundos
                 max_pulse=int(self.PULSE_MAX * 1000),
             )
-            debug(f"Servos configurados (canais {self.front_channel} e {self.rear_channel})", "BRAKE")
+            debug(
+                f"Servos configurados (canais {self.front_channel} e {self.rear_channel})",
+                "BRAKE",
+            )
 
             # Posiciona servos na posição solta (freios liberados)
             if self.i2c_lock:
@@ -245,7 +253,10 @@ class BrakeManager:
             time.sleep(0.5)
 
             self.is_initialized = True
-            info(f"Freios inicializados | PWM: {self.PWM_FREQUENCY}Hz | Canais: {self.front_channel}/{self.rear_channel}", "BRAKE")
+            info(
+                f"Freios inicializados | PWM: {self.PWM_FREQUENCY}Hz | Canais: {self.front_channel}/{self.rear_channel}",
+                "BRAKE",
+            )
 
             # Teste rápido dos servos
             self._test_servos()
@@ -253,7 +264,10 @@ class BrakeManager:
             return True
 
         except Exception as e:
-            error(f"Erro ao inicializar freios: {e} | Verifique: PCA9685 I2C, canais, alimentação servos 6V", "BRAKE")
+            error(
+                f"Erro ao inicializar freios: {e} | Verifique: PCA9685 I2C, canais, alimentação servos 6V",
+                "BRAKE",
+            )
 
             self.is_initialized = False
             return False
@@ -306,7 +320,10 @@ class BrakeManager:
             now = time.time()
             if now - self._last_log_time >= 1.0 and brake_input > 0:
                 self._last_log_time = now
-                debug(f"Freio: {brake_input:.1f}% (Diant: {self.front_brake_force:.1f}%, Tras: {self.rear_brake_force:.1f}%)", "BRAKE")
+                debug(
+                    f"Freio: {brake_input:.1f}% (Diant: {self.front_brake_force:.1f}%, Tras: {self.rear_brake_force:.1f}%)",
+                    "BRAKE",
+                )
 
             # Copia valores para I2C fora do lock
             front_angle = self.front_brake_angle
@@ -343,10 +360,13 @@ class BrakeManager:
         self.front_brake_angle = (
             self.BRAKE_MIN_ANGLE + (self.front_brake_force / 100.0) * front_range
         )
-        self.rear_brake_angle = self.BRAKE_MIN_ANGLE + (self.rear_brake_force / 100.0) * rear_range
+        self.rear_brake_angle = (
+            self.BRAKE_MIN_ANGLE + (self.rear_brake_force / 100.0) * rear_range
+        )
 
-    def _write_brake_servos(self, front_angle: float, rear_angle: float,
-                            last_front, last_rear):
+    def _write_brake_servos(
+        self, front_angle: float, rear_angle: float, last_front, last_rear
+    ):
         """Escreve ângulos nos servos via I2C (fora do state_lock)."""
         if not (self.front_servo and self.rear_servo):
             return

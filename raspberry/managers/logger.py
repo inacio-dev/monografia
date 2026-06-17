@@ -189,5 +189,3 @@ def info(message: str, component: str = "", rate_limit: float = 0):
 def debug(message: str, component: str = "", rate_limit: float = 0):
     """Log de debug"""
     get_logger().debug(message, component, rate_limit)
-
-

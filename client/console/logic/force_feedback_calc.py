@@ -37,18 +37,46 @@ class ForceFeedbackCalculator:
     # Vibração idle do motor (sempre ligado)
     # NOTA: FF_GAIN a 15% escala tudo ×0.15, então magnitudes altas são necessárias
     # para compensar. Ex: 60% raw × 0.15 gain = 9% real no motor.
-    IDLE_PERIODIC_PERIOD_MS = 200    # 5Hz — idle engine (motor perceptível)
-    IDLE_PERIODIC_MAGNITUDE = 15.0   # 15% raw → ~2% real com gain 15%
+    IDLE_PERIODIC_PERIOD_MS = 200  # 5Hz — idle engine (motor perceptível)
+    IDLE_PERIODIC_MAGNITUDE = 15.0  # 15% raw → ~2% real com gain 15%
 
     # Limites de inertia
-    IDLE_INERTIA_PCT = 5.0           # Inertia mínima (peso do volante parado)
-    MAX_INERTIA_PCT = 80.0           # Inertia máxima em alta velocidade
+    IDLE_INERTIA_PCT = 5.0  # Inertia mínima (peso do volante parado)
+    MAX_INERTIA_PCT = 80.0  # Inertia máxima em alta velocidade
+
+    # ---- FF_CONSTANT: puxão de curva (calibrado na sessão externa-01) ----
+    # A telemetria real mostra que a aceleração lateral dinâmica do BMI160 neste
+    # veículo é fraca (após descontar o bias de montagem, o desvio em reta fica
+    # em ~0.001 g; mesmo em curva o p99 fica em ~0.18 g), enquanto a taxa de
+    # guinada (gyro_z) é o sinal limpo e dominante. Distribuição medida do yaw
+    # em condução: p50~6, p90~28, p99~46 deg/s. As constantes abaixo mapeiam
+    # essa faixa para a saída de força, com zona morta para rejeitar ruído na
+    # reta e saturação perto da curva mais forte registrada.
+    YAW_DEADBAND_DPS = 5.0  # Abaixo disso = reta/ruído → sem puxão
+    YAW_FULL_DPS = 45.0  # Curva forte (~p99) → contribuição máxima
+    LAT_DEADBAND_G = 0.06  # Lateral dinâmica abaixo disso = sem curva real
+    LAT_FULL_G = 0.35  # G lateral forte (~máximo medido) → máx
+    LAT_WEIGHT = 0.5  # Lateral reforça o yaw (sinal secundário)
+    DIR_THRESHOLD = 2.5  # Histerese para decidir left/right/neutral
+
+    # ---- Correção de bias DC dos sensores inerciais (ZUPT) ----
+    # O BMI160 é um IMU de 6 eixos (sem magnetômetro). Dois offsets estáticos
+    # contaminam a telemetria e o FF e são estimados em repouso (a grandeza
+    # verdadeira é zero) e descontados:
+    #  (i) zero-rate offset do giroscópio: sem correção o yaw integrado deriva.
+    #  (ii) bias dos acelerômetros horizontais (~0.07 g): a gravidade vaza em
+    #       accel_x/accel_y pela leve inclinação de montagem do sensor, gerando
+    #       puxão fantasma e falso "Curva" no classificador. O valor cru segue
+    #       alimentando roll/pitch, que dependem da componente da gravidade.
+    # Parado, o yaw é congelado para não acumular ruído residual.
+    YAW_BIAS_ALPHA = 0.02  # EMA do zero-rate do giroscópio em repouso (~0,5 s)
+    ACCEL_BIAS_ALPHA = 0.02  # EMA do bias dos acelerômetros horizontais (~0,5 s)
 
     # Histórico do BMI160 para detecção de eventos
-    HISTORY_SIZE = 20                # ~333ms a 60Hz
+    HISTORY_SIZE = 20  # ~333ms a 60Hz
 
     # Buffer de exportação (para auto-save em ff_*.pkl)
-    EXPORT_BUFFER_MAX_ROWS = 30000   # ~5 min a 100Hz
+    EXPORT_BUFFER_MAX_ROWS = 30000  # ~5 min a 100Hz
 
     # Campos persistidos no ff_*.pkl (além de timestamp)
     # O nome do arquivo é "ff" por histórico, mas o buffer guarda qualquer
@@ -56,33 +84,51 @@ class ForceFeedbackCalculator:
     # vídeo, filtros PDI. Todas alinhadas ao mesmo timestamp.
     EXPORT_FIELDS = (
         # Forças G
-        "g_force_frontal", "g_force_lateral", "g_force_vertical",
+        "g_force_frontal",
+        "g_force_lateral",
+        "g_force_vertical",
         # Ângulos
-        "roll_angle", "pitch_angle", "yaw_angle",
+        "roll_angle",
+        "pitch_angle",
+        "yaw_angle",
         # FF_CONSTANT
-        "steering_feedback_intensity", "steering_feedback_direction",
+        "steering_feedback_intensity",
+        "steering_feedback_direction",
         # FF_RUMBLE
-        "rumble_strong", "rumble_weak",
+        "rumble_strong",
+        "rumble_weak",
         # FF_PERIODIC
-        "periodic_period_ms", "periodic_magnitude",
+        "periodic_period_ms",
+        "periodic_magnitude",
         # FF_INERTIA
         "inertia",
         # Contexto + derivadas
         "ff_context",
-        "ff_jerk_frontal", "ff_jerk_vertical",
-        "ff_jerk_throttle", "ff_jerk_brake", "ff_jerk_steering",
+        "ff_jerk_frontal",
+        "ff_jerk_vertical",
+        "ff_jerk_throttle",
+        "ff_jerk_brake",
+        "ff_jerk_steering",
         "ff_roughness",
         # Inputs do G923 (espelho do hardware para correlação)
-        "g923_steering", "g923_throttle", "g923_brake",
+        "g923_steering",
+        "g923_throttle",
+        "g923_brake",
         # Vídeo — decode + filtros PDI (populados pelo loop do cliente
         # a partir do VideoDisplay antes de chamar calculate_g_forces_and_ff)
-        "video_decode_ms", "video_filter_ms", "video_filters_active",
+        "video_decode_ms",
+        "video_filter_ms",
+        "video_filters_active",
         "video_resolution",
         # Timing individual por filtro PDI (None quando filtro inativo)
-        "filter_timing_sharpen_ms", "filter_timing_unsharp_ms",
-        "filter_timing_high_boost_ms", "filter_timing_clahe_ms",
-        "filter_timing_bilateral_ms", "filter_timing_super_res_ms",
-        "filter_timing_brightness_up_ms", "filter_timing_brightness_down_ms",
+        "filter_timing_sharpen_ms",
+        "filter_timing_unsharp_ms",
+        "filter_timing_high_boost_ms",
+        "filter_timing_clahe_ms",
+        "filter_timing_bilateral_ms",
+        "filter_timing_super_res_ms",
+        "filter_timing_brightness_up_ms",
+        "filter_timing_brightness_down_ms",
     )
 
     def __init__(self, console):
@@ -105,6 +151,11 @@ class ForceFeedbackCalculator:
         self._yaw_angle = 0.0
         self._last_angle_time = None
 
+        # Bias DC dos sensores inerciais (estimados em repouso via ZUPT)
+        self._yaw_bias = 0.0  # zero-rate do giroscópio (°/s)
+        self._lat_bias = 0.0  # offset de montagem no eixo lateral (g)
+        self._front_bias = 0.0  # offset de montagem no eixo frontal (g)
+
         # Buffer de exportação — chave → lista de valores (inclui timestamp).
         # Cada append é uma amostra com todos os campos calculados na mesma iteração.
         # Acessado pela thread de sensores (writer) e pela thread de auto-save (reader).
@@ -115,14 +166,22 @@ class ForceFeedbackCalculator:
     # HISTÓRICO E DETECÇÃO DE EVENTOS
     # ================================================================
 
-    def _add_to_history(self, accel_x, accel_y, accel_z, gyro_z,
-                        throttle, brake, steering):
+    def _add_to_history(
+        self, accel_x, accel_y, accel_z, gyro_z, throttle, brake, steering
+    ):
         """Armazena leitura no buffer circular para análise temporal"""
-        self._history.append({
-            'ax': accel_x, 'ay': accel_y, 'az': accel_z,
-            'gz': gyro_z, 'thr': throttle, 'brk': brake,
-            'steer': steering, 't': time.monotonic(),
-        })
+        self._history.append(
+            {
+                "ax": accel_x,
+                "ay": accel_y,
+                "az": accel_z,
+                "gz": gyro_z,
+                "thr": throttle,
+                "brk": brake,
+                "steer": steering,
+                "t": time.monotonic(),
+            }
+        )
 
     def _calc_jerk(self, key):
         """
@@ -137,7 +196,7 @@ class ForceFeedbackCalculator:
         h = list(self._history)
         n = min(5, len(h))
         samples = h[-n:]
-        dt = samples[-1]['t'] - samples[0]['t']
+        dt = samples[-1]["t"] - samples[0]["t"]
         if dt < 0.001:
             return 0.0
         return (samples[-1][key] - samples[0][key]) / dt
@@ -152,10 +211,10 @@ class ForceFeedbackCalculator:
         """
         if len(self._history) < 5:
             return 0.0
-        samples = [s['az'] for s in list(self._history)[-10:]]
+        samples = [s["az"] for s in list(self._history)[-10:]]
         mean = sum(samples) / len(samples)
         variance = sum((x - mean) ** 2 for x in samples) / len(samples)
-        return variance ** 0.5
+        return variance**0.5
 
     # ================================================================
     # CÁLCULO PRINCIPAL
@@ -180,23 +239,34 @@ class ForceFeedbackCalculator:
             accel_y = sensor_data.get("bmi160_accel_y", 0.0)  # Lateral
             accel_z = sensor_data.get("bmi160_accel_z", 9.81)  # Vertical
 
-            # Obtém dados de giroscópio em °/s
-            gyro_x = sensor_data.get("bmi160_gyro_x", 0.0)
-            gyro_y = sensor_data.get("bmi160_gyro_y", 0.0)
+            # Obtém taxa de guinada do giroscópio em °/s (eixos x/y não usados)
             gyro_z = sensor_data.get("bmi160_gyro_z", 0.0)  # Rotação (yaw)
 
             # === CALCULA FORÇAS G ===
+            # accel_x/accel_y carregam um offset DC de montagem (a gravidade
+            # vaza nos eixos horizontais pela leve inclinação do sensor). O valor
+            # cru é mantido para roll/pitch (que dependem da gravidade); a versão
+            # dinâmica abaixo desconta o bias para o contexto, o FF e a telemetria.
             g_force_frontal = accel_x / 9.81
             g_force_lateral = accel_y / 9.81
             g_force_vertical = (accel_z - 9.81) / 9.81
 
-            sensor_data["g_force_frontal"] = g_force_frontal
-            sensor_data["g_force_lateral"] = g_force_lateral
+            # Forças G dinâmicas (sem o bias de montagem) — zero com o veículo
+            # parado. São estas que vão ao contexto, ao FF e à exportação.
+            g_front_dyn = g_force_frontal - self._front_bias
+            g_lat_dyn = g_force_lateral - self._lat_bias
+
+            sensor_data["g_force_frontal"] = g_front_dyn
+            sensor_data["g_force_lateral"] = g_lat_dyn
             sensor_data["g_force_vertical"] = g_force_vertical
 
-            # === CALCULA ROLL / PITCH / YAW ===
-            # Roll e Pitch: calculados pelo acelerômetro (estável, sem drift)
-            # Yaw: integrado pelo giroscópio (tem drift, mas útil para telemetria)
+            # Taxa de guinada com o bias DC descontado (estimado em repouso,
+            # adiante). Usada no yaw, no classificador de contexto e no FF para
+            # que um offset estático não vire movimento/puxão fantasma.
+            gyro_corr = gyro_z - self._yaw_bias
+
+            # === CALCULA ROLL / PITCH ===
+            # Calculados pelo acelerômetro (estável, sem drift)
             accel_mag = math.sqrt(accel_x**2 + accel_y**2 + accel_z**2)
             if accel_mag > 0.5:  # Ignora se aceleração total for muito baixa (ruído)
                 roll_rad = math.atan2(accel_y, accel_z)
@@ -206,20 +276,6 @@ class ForceFeedbackCalculator:
             else:
                 roll_deg = sensor_data.get("roll_angle", 0.0)
                 pitch_deg = sensor_data.get("pitch_angle", 0.0)
-
-            # Yaw via integração do gyro_z
-            now = time.monotonic()
-            if self._last_angle_time is not None:
-                dt = now - self._last_angle_time
-                if 0 < dt < 0.2:  # Ignora gaps grandes (pausa/reconexão)
-                    self._yaw_angle += gyro_z * dt
-                    # Mantém no range -180° a +180°
-                    self._yaw_angle = ((self._yaw_angle + 180) % 360) - 180
-            self._last_angle_time = now
-
-            sensor_data["roll_angle"] = round(roll_deg, 2)
-            sensor_data["pitch_angle"] = round(pitch_deg, 2)
-            sensor_data["yaw_angle"] = round(self._yaw_angle, 2)
 
             # Obtém estado atual do G923 (throttle/brake/steering para contexto)
             throttle = 0
@@ -231,46 +287,92 @@ class ForceFeedbackCalculator:
                 brake = g923._brake
                 steering = g923._steering
 
+            # === DETECÇÃO DE CONTEXTO ===
+            is_accelerating = throttle > 10
+            is_braking = brake > 10
+            is_turning = abs(g_lat_dyn) > 0.08 or abs(gyro_corr) > 3
+
+            # === DETECÇÃO DE VEÍCULO PARADO ===
+            # Sem throttle, sem brake e sem movimento significativo = parado.
+            # As forças G entram já sem o bias de montagem e o yaw sem o
+            # zero-rate, para que um offset estático não mantenha o veículo
+            # "ativo" nem gere falso "Curva".
+            vehicle_active = (
+                throttle > 2
+                or brake > 2
+                or abs(g_lat_dyn) > 0.12
+                or abs(g_front_dyn) > 0.12
+                or abs(gyro_corr) > 2.5
+            )
+
+            # === YAW: integração do gyro_z com correção de bias (ZUPT) ===
+            # Integra só em movimento; parado, o yaw é congelado (a taxa real é
+            # zero), o que elimina a deriva por integração em sessões estáticas.
+            now = time.monotonic()
+            if self._last_angle_time is not None:
+                dt = now - self._last_angle_time
+                if 0 < dt < 0.2 and vehicle_active:  # ignora gaps e repouso
+                    self._yaw_angle += gyro_corr * dt
+                    # Mantém no range -180° a +180°
+                    self._yaw_angle = ((self._yaw_angle + 180) % 360) - 180
+            self._last_angle_time = now
+
+            # ZUPT: parado, giroscópio e acelerômetros leem os próprios offsets
+            # (a grandeza real é zero); aprende-os por EMA para descontar nas
+            # próximas iterações. Em movimento, congela todos os biases.
+            if not vehicle_active:
+                self._yaw_bias = (
+                    self._yaw_bias * (1.0 - self.YAW_BIAS_ALPHA)
+                    + gyro_z * self.YAW_BIAS_ALPHA
+                )
+                a = self.ACCEL_BIAS_ALPHA
+                self._lat_bias = self._lat_bias * (1.0 - a) + g_force_lateral * a
+                self._front_bias = self._front_bias * (1.0 - a) + g_force_frontal * a
+
+            sensor_data["roll_angle"] = round(roll_deg, 2)
+            sensor_data["pitch_angle"] = round(pitch_deg, 2)
+            sensor_data["yaw_angle"] = round(self._yaw_angle, 2)
+
             # Armazena no histórico para detecção de eventos
             self._add_to_history(
                 accel_x, accel_y, accel_z, gyro_z, throttle, brake, steering
             )
 
-            # === DETECÇÃO DE CONTEXTO ===
-            is_accelerating = throttle > 10
-            is_braking = brake > 10
-            is_turning = abs(g_force_lateral) > 0.08 or abs(gyro_z) > 3
-
-            # === DETECÇÃO DE VEÍCULO PARADO ===
-            # Sem throttle, sem brake e sem movimento significativo = parado
-            # Ruído do BMI160 gera ~0.05g lateral/frontal — ignora
-            vehicle_active = (
-                throttle > 2 or brake > 2
-                or abs(g_force_lateral) > 0.12
-                or abs(g_force_frontal) > 0.12
-                or abs(gyro_z) > 2.5
-            )
-
             # Jerk do BMI160: taxa de variação (detecta eventos bruscos)
-            jerk_frontal = self._calc_jerk('ax')   # Partida/frenagem brusca
-            jerk_vertical = self._calc_jerk('az')   # Bumps na pista
+            jerk_frontal = self._calc_jerk("ax")  # Partida/frenagem brusca
+            jerk_vertical = self._calc_jerk("az")  # Bumps na pista
 
             # Jerk dos controles: mudanças bruscas nos inputs
-            jerk_throttle = self._calc_jerk('thr')   # Aceleração repentina
-            jerk_brake = self._calc_jerk('brk')      # Frenagem repentina
-            jerk_steering = self._calc_jerk('steer')  # Virada brusca
+            jerk_throttle = self._calc_jerk("thr")  # Aceleração repentina
+            jerk_brake = self._calc_jerk("brk")  # Frenagem repentina
+            jerk_steering = self._calc_jerk("steer")  # Virada brusca
 
             # Rugosidade da pista (histórico de accel_z)
             roughness = self._road_roughness()
 
-            # === 1. FF_CONSTANT: Puxão lateral (G lateral + yaw) ===
+            # === 1. FF_CONSTANT: Puxão de curva (yaw dominante + G lateral) ===
             if vehicle_active:
                 sensitivity = self.console.ff_sensitivity_var.get() / 100.0
                 filter_strength = self.console.ff_filter_var.get() / 100.0
 
-                lateral_component = min(abs(g_force_lateral) * 50, 100)
-                yaw_component = min(abs(gyro_z) / 60.0 * 50, 50)
-                base_ff = min(lateral_component + yaw_component, 100)
+                # Yaw: sinal limpo e dominante. Zona morta rejeita ruído/bias
+                # da reta; satura na curva mais forte registrada.
+                yaw_span = self.YAW_FULL_DPS - self.YAW_DEADBAND_DPS
+                yaw_component = max(
+                    0.0,
+                    min((abs(gyro_corr) - self.YAW_DEADBAND_DPS) / yaw_span * 100, 100),
+                )
+
+                # G lateral: reforço secundário, só quando há aceleração real
+                # acima do piso de ruído do BMI160.
+                lat_span = self.LAT_FULL_G - self.LAT_DEADBAND_G
+                lat_mag = abs(g_lat_dyn)
+                lateral_component = max(
+                    0.0,
+                    min((lat_mag - self.LAT_DEADBAND_G) / lat_span * 100, 100),
+                )
+
+                base_ff = min(yaw_component + lateral_component * self.LAT_WEIGHT, 100)
 
                 adjusted_ff = base_ff * sensitivity
                 adjusted_ff = (
@@ -280,13 +382,12 @@ class ForceFeedbackCalculator:
                 self._filtered_constant_ff = adjusted_ff
                 final_ff = max(0.0, min(100.0, adjusted_ff))
 
-                # Direção do puxão
-                lateral_dir = g_force_lateral * 10
-                yaw_dir = gyro_z
-                total_dir = lateral_dir + yaw_dir
-                if total_dir > 1.5:
+                # Direção do puxão — yaw decide; lateral só entra acima do ruído
+                lat_dir = g_lat_dyn if lat_mag > self.LAT_DEADBAND_G else 0.0
+                total_dir = gyro_corr + lat_dir * 10
+                if total_dir > self.DIR_THRESHOLD:
                     direction = "right"
-                elif total_dir < -1.5:
+                elif total_dir < -self.DIR_THRESHOLD:
                     direction = "left"
                 else:
                     direction = "neutral"
@@ -314,22 +415,26 @@ class ForceFeedbackCalculator:
                 bump_vibration = min(vertical_dev * 400, 100)
 
                 # Componente 3: Impacto frontal (frenagem/aceleração forte)
-                frontal_impact = min(abs(g_force_frontal) * 200, 100)
+                frontal_impact = min(abs(g_front_dyn) * 200, 100)
 
                 # Componente 4: Jerk BMI160 (eventos bruscos)
                 jerk_impact = min(abs(jerk_frontal) * 8, 80)
                 jerk_bump = min(abs(jerk_vertical) * 8, 80)
 
                 # Componente 5: Jerk controles (mudanças bruscas nos inputs)
-                throttle_burst = min(abs(jerk_throttle) * 0.8, 60) if jerk_throttle > 30 else 0
+                throttle_burst = (
+                    min(abs(jerk_throttle) * 0.8, 60) if jerk_throttle > 30 else 0
+                )
                 brake_burst = min(abs(jerk_brake) * 1.0, 80) if jerk_brake > 30 else 0
-                steering_burst = min(abs(jerk_steering) * 0.6, 50) if abs(jerk_steering) > 20 else 0
+                steering_burst = (
+                    min(abs(jerk_steering) * 0.6, 50) if abs(jerk_steering) > 20 else 0
+                )
 
                 # Componente 6: Rugosidade da pista (histórico)
                 roughness_vibration = min(roughness * 80, 70)
 
                 # Componente 7: Stress lateral nos pneus (curva = vibração)
-                turn_vibration = min(abs(g_force_lateral) * 150, 80) if is_turning else 0
+                turn_vibration = min(abs(g_lat_dyn) * 150, 80) if is_turning else 0
 
                 # Componente 8: Frenagem contínua
                 brake_rumble = min(brake / 100.0 * 70, 70) if brake > 10 else 0
@@ -388,7 +493,9 @@ class ForceFeedbackCalculator:
 
                 # Curva aumenta vibração (stress nos pneus)
                 if is_turning:
-                    periodic_magnitude = min(periodic_magnitude + abs(g_force_lateral) * 40, 100)
+                    periodic_magnitude = min(
+                        periodic_magnitude + abs(g_lat_dyn) * 40, 100
+                    )
             else:
                 # Veículo parado — sem vibração de motor
                 period_ms = self.IDLE_PERIODIC_PERIOD_MS
@@ -411,9 +518,7 @@ class ForceFeedbackCalculator:
                 inertia_raw = self.IDLE_INERTIA_PCT
 
             # EMA para suavizar transição
-            self._filtered_inertia = (
-                inertia_raw * 0.3 + self._filtered_inertia * 0.7
-            )
+            self._filtered_inertia = inertia_raw * 0.3 + self._filtered_inertia * 0.7
 
             sensor_data["inertia"] = round(self._filtered_inertia)
 
@@ -552,7 +657,9 @@ class ForceFeedbackCalculator:
 
             # FF_PERIODIC: vibração do motor (RPM)
             period = sensor_data.get("periodic_period_ms", self.IDLE_PERIODIC_PERIOD_MS)
-            magnitude = sensor_data.get("periodic_magnitude", self.IDLE_PERIODIC_MAGNITUDE)
+            magnitude = sensor_data.get(
+                "periodic_magnitude", self.IDLE_PERIODIC_MAGNITUDE
+            )
             g923.update_periodic(period, magnitude)
 
             # FF_INERTIA: peso do volante

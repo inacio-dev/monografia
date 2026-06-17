@@ -69,7 +69,7 @@ import sys
 import threading
 import time
 import traceback
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from managers import (
     BMI160Manager,
@@ -163,7 +163,9 @@ class F1CarMultiThreadSystem:
         self.current_sensor_data = {}
         self.current_power_data = {}
         self.current_temp_data = {}
-        self.current_rpi_sys_data = {}  # Métricas do sistema Raspberry Pi (CPU, memória, disco, rede)
+        self.current_rpi_sys_data = (
+            {}
+        )  # Métricas do sistema Raspberry Pi (CPU, memória, disco, rede)
         # === THREADS ===
         self.camera_thread: Optional[threading.Thread] = None
         self.sensor_thread: Optional[threading.Thread] = None
@@ -225,7 +227,10 @@ class F1CarMultiThreadSystem:
         # 1. Rede (crítico - deve inicializar primeiro)
         debug("Inicializando rede UDP...", "MAIN")
         self.network_mgr = NetworkManager(
-            video_port=self.target_port, sensor_port=9997, command_port=9998, buffer_size=131072
+            video_port=self.target_port,
+            sensor_port=9997,
+            command_port=9998,
+            buffer_size=131072,
         )
         self.network_mgr.command_callback = self._process_client_command
 
@@ -324,7 +329,9 @@ class F1CarMultiThreadSystem:
 
         # 8. Monitor de energia (Pro Micro USB Serial + INA219 I2C)
         debug("Inicializando monitor de energia...", "MAIN")
-        self.power_mgr = PowerMonitorManager(sample_rate=10, buffer_size=20, i2c_lock=self.i2c_lock)
+        self.power_mgr = PowerMonitorManager(
+            sample_rate=10, buffer_size=20, i2c_lock=self.i2c_lock
+        )
         if self.power_mgr.initialize():
             self.system_status["power"] = "Online"
             success_count += 1
@@ -463,7 +470,9 @@ class F1CarMultiThreadSystem:
                     t_pwr = time.monotonic()
                     if self.power_mgr.update():
                         power_data = self.power_mgr.get_sensor_data()
-                        power_data["timing_power_ms"] = round((time.monotonic() - t_pwr) * 1000, 2)
+                        power_data["timing_power_ms"] = round(
+                            (time.monotonic() - t_pwr) * 1000, 2
+                        )
 
                         with self.current_data_lock:
                             self.current_power_data = power_data
@@ -494,10 +503,7 @@ class F1CarMultiThreadSystem:
                         self.current_temp_data = temp_data
 
                 # Métricas do sistema Raspberry Pi (CPU, memória, disco, rede)
-                if (
-                    self.rpi_sys_mgr
-                    and self.system_status["rpi_system"] == "Online"
-                ):
+                if self.rpi_sys_mgr and self.system_status["rpi_system"] == "Online":
                     if self.rpi_sys_mgr.update():
                         rpi_sys_data = self.rpi_sys_mgr.get_sensor_data()
 
@@ -594,7 +600,6 @@ class F1CarMultiThreadSystem:
                 t_status = time.monotonic() - t_status_start
 
                 # === CONSOLIDA E TRANSMITE ===
-                t_consolidate = time.monotonic()
                 consolidated_data = {
                     **sensor_data,
                     **motor_status,
@@ -609,7 +614,9 @@ class F1CarMultiThreadSystem:
                     "timing_lock_ms": round(t_lock * 1000, 2),
                     "timing_status_ms": round(t_status * 1000, 2),
                     "timing_state_cmd_ms": self._last_state_cmd_ms,
-                    "timing_total_pre_send_ms": round((time.monotonic() - t0) * 1000, 2),
+                    "timing_total_pre_send_ms": round(
+                        (time.monotonic() - t0) * 1000, 2
+                    ),
                 }
 
                 t_send_start = time.monotonic()
@@ -734,7 +741,10 @@ class F1CarMultiThreadSystem:
                     if self.camera_mgr:
                         # TODO: recriação do encoder necessária para efetivar mudança
                         self.camera_mgr.quality = max(1, min(100, quality))
-                        info(f"Qualidade MJPEG: {quality} (requer restart do encoder)", "CMD")
+                        info(
+                            f"Qualidade MJPEG: {quality} (requer restart do encoder)",
+                            "CMD",
+                        )
 
                 elif control_cmd.startswith("CAMERA_RESOLUTION:"):
                     resolution = control_cmd[18:].strip()
@@ -758,9 +768,12 @@ class F1CarMultiThreadSystem:
                                     sharpness=sharpness,
                                     contrast=contrast,
                                     saturation=saturation,
-                                    brightness=brightness
+                                    brightness=brightness,
                                 )
-                                debug(f"Controles: sharp={sharpness}, cont={contrast}, sat={saturation}, bri={brightness}", "CMD")
+                                debug(
+                                    f"Controles: sharp={sharpness}, cont={contrast}, sat={saturation}, bri={brightness}",
+                                    "CMD",
+                                )
                     except ValueError:
                         warn("Formato inválido para CAMERA_CONTROLS", "CMD")
 
@@ -1004,7 +1017,9 @@ def main():
         sys.exit(1)
 
     # Log configuração de câmera
-    info(f"Câmera: {args.resolution} @ {args.fps}fps, qualidade={args.quality}", "CONFIG")
+    info(
+        f"Câmera: {args.resolution} @ {args.fps}fps, qualidade={args.quality}", "CONFIG"
+    )
 
     # Cria e inicia sistema
     system = F1CarMultiThreadSystem(

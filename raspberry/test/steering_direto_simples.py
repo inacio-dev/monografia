@@ -25,9 +25,9 @@ try:
 
     # Configurar servo - igual ao que funcionou
     steering_servo = servo.Servo(
-        pca.channels[0],        # Canal 0 (direção)
-        min_pulse=1000,         # 1ms
-        max_pulse=2000,         # 2ms
+        pca.channels[0],  # Canal 0 (direção)
+        min_pulse=1000,  # 1ms
+        max_pulse=2000,  # 2ms
     )
     print("✓ Servo direção configurado no canal 0")
 
@@ -35,16 +35,16 @@ try:
 
     # Sequência F1 com range COMPLETO: 0° a 180°
     steering_sequence = [
-        ("Centro", 90),             # Centro (meio do range)
-        ("Esquerda leve", 70),      # 20° à esquerda do centro
-        ("Esquerda média", 45),     # 45° à esquerda do centro
-        ("Esquerda forte", 20),     # 70° à esquerda do centro
-        ("Esquerda MÁXIMA", 0),     # EXTREMO ESQUERDA
+        ("Centro", 90),  # Centro (meio do range)
+        ("Esquerda leve", 70),  # 20° à esquerda do centro
+        ("Esquerda média", 45),  # 45° à esquerda do centro
+        ("Esquerda forte", 20),  # 70° à esquerda do centro
+        ("Esquerda MÁXIMA", 0),  # EXTREMO ESQUERDA
         ("Centro", 90),
-        ("Direita leve", 110),      # 20° à direita do centro
-        ("Direita média", 135),     # 45° à direita do centro
-        ("Direita forte", 160),     # 70° à direita do centro
-        ("Direita MÁXIMA", 180),    # EXTREMO DIREITA
+        ("Direita leve", 110),  # 20° à direita do centro
+        ("Direita média", 135),  # 45° à direita do centro
+        ("Direita forte", 160),  # 70° à direita do centro
+        ("Direita MÁXIMA", 180),  # EXTREMO DIREITA
         ("Centro", 90),
     ]
 

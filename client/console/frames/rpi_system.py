@@ -44,9 +44,7 @@ def create_rpi_system_frame(console):
     )
     console.rpi_cpu_usage_display.pack()
 
-    tk.Label(
-        cpu_frame, text="%", bg="#2c2c2c", fg="#aaaaaa", font=("Arial", 8)
-    ).pack()
+    tk.Label(cpu_frame, text="%", bg="#2c2c2c", fg="#aaaaaa", font=("Arial", 8)).pack()
 
     # CPU Temp
     temp_frame = tk.Frame(inner_frame, bg="#2c2c2c", relief=tk.RAISED, bd=1)
@@ -86,9 +84,7 @@ def create_rpi_system_frame(console):
     )
     console.rpi_mem_display.pack()
 
-    tk.Label(
-        mem_frame, text="%", bg="#2c2c2c", fg="#aaaaaa", font=("Arial", 8)
-    ).pack()
+    tk.Label(mem_frame, text="%", bg="#2c2c2c", fg="#aaaaaa", font=("Arial", 8)).pack()
 
     # Disco
     disk_frame = tk.Frame(inner_frame, bg="#2c2c2c", relief=tk.RAISED, bd=1)
@@ -107,9 +103,7 @@ def create_rpi_system_frame(console):
     )
     console.rpi_disk_display.pack()
 
-    tk.Label(
-        disk_frame, text="%", bg="#2c2c2c", fg="#aaaaaa", font=("Arial", 8)
-    ).pack()
+    tk.Label(disk_frame, text="%", bg="#2c2c2c", fg="#aaaaaa", font=("Arial", 8)).pack()
 
     # === LINHA 2: Rede e Sistema ===
     # Rede RX

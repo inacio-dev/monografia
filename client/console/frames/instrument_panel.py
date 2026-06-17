@@ -131,4 +131,3 @@ def create_instrument_panel(console):
     tk.Label(
         temp_frame, text="°C", bg="#2c2c2c", fg="#cccccc", font=("Arial", 10)
     ).pack()
-

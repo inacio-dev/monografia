@@ -113,20 +113,22 @@ class SteeringManager:
     STEERING_CHANNEL = 0  # Canal 0 do PCA9685
 
     # Endereço I2C do PCA9685 (compartilhado com brake_manager)
-    PCA9685_I2C_ADDRESS = 0x41  # PCA9685 com A0 soldado (evita conflito com INA219 em 0x40)
+    PCA9685_I2C_ADDRESS = (
+        0x41  # PCA9685 com A0 soldado (evita conflito com INA219 em 0x40)
+    )
 
     # Características do servo MG996R
     PWM_FREQUENCY = 50  # 50Hz para servos
-    PULSE_MIN = 1.0  # 1.0ms = 0° (máximo esquerda)
-    PULSE_MAX = 2.0  # 2.0ms = 180° (máximo direita)
+    PULSE_MIN = 0.5  # 0.5ms = 0° (máximo esquerda) - janela alargada p/ curso ~180°
+    PULSE_MAX = 2.5  # 2.5ms = 180° (máximo direita) - janela alargada p/ curso ~180°
     # Limites mecânicos da direção (em graus) - RANGE COMPLETO 0° a 180°
-    STEERING_MIN_ANGLE = 0    # 0° = máximo à esquerda
-    STEERING_MAX_ANGLE = 180  # 180° = máximo à direita
-    STEERING_CENTER = 90      # 90° = posição central
+    STEERING_MIN_ANGLE = 0  # 0° = máximo à esquerda
+    STEERING_MAX_ANGLE = 160  # 160° = máximo à direita (limite p/ não forçar batente)
+    STEERING_CENTER = 90  # 90° = posição central
 
     # Range de direção útil (±90° do centro)
-    MAX_STEERING_LEFT = -90   # -90° (esquerda máxima: 90°-90°=0°)
-    MAX_STEERING_RIGHT = 90   # +90° (direita máxima: 90°+90°=180°)
+    MAX_STEERING_LEFT = -90  # -90° (esquerda máxima: 90°-90°=0°)
+    MAX_STEERING_RIGHT = 90  # +90° (direita máxima: 90°+90°=180°)
 
     def __init__(
         self,
@@ -192,7 +194,10 @@ class SteeringManager:
         Returns:
             bool: True se inicializado com sucesso
         """
-        info(f"Inicializando direção | Canal: {self.steering_channel} | I2C: 0x{self.pca9685_address:02X} | Sens: {self.steering_sensitivity:.1f}x | ±{self.max_steering_angle}°", "STEERING")
+        info(
+            f"Inicializando direção | Canal: {self.steering_channel} | I2C: 0x{self.pca9685_address:02X} | Sens: {self.steering_sensitivity:.1f}x | ±{self.max_steering_angle}°",
+            "STEERING",
+        )
 
         try:
             # Inicializa barramento I2C (pode ser compartilhado com brake_manager)
@@ -219,7 +224,10 @@ class SteeringManager:
             time.sleep(0.5)
 
             self.is_initialized = True
-            info(f"Direção inicializada | PWM: {self.PWM_FREQUENCY}Hz | Canal: {self.steering_channel}", "STEERING")
+            info(
+                f"Direção inicializada | PWM: {self.PWM_FREQUENCY}Hz | Canal: {self.steering_channel}",
+                "STEERING",
+            )
 
             # Teste rápido da direção
             self._test_steering()
@@ -227,7 +235,10 @@ class SteeringManager:
             return True
 
         except Exception as e:
-            error(f"Erro ao inicializar direção: {e} | Verifique: PCA9685 I2C, canal servo, alimentação 6V", "STEERING")
+            error(
+                f"Erro ao inicializar direção: {e} | Verifique: PCA9685 I2C, canal servo, alimentação 6V",
+                "STEERING",
+            )
 
             self.is_initialized = False
             return False
@@ -267,7 +278,10 @@ class SteeringManager:
                 )
 
                 # Só escreve no I2C se o ângulo mudou (dedup)
-                if self._last_servo_angle is None or abs(final_angle - self._last_servo_angle) >= 0.1:
+                if (
+                    self._last_servo_angle is None
+                    or abs(final_angle - self._last_servo_angle) >= 0.1
+                ):
                     if self.i2c_lock:
                         self.i2c_lock.acquire(priority=0)  # Alta
                         try:
@@ -282,7 +296,10 @@ class SteeringManager:
                 now = time.time()
                 if now - self._last_log_time >= 1.0 and abs(steering_input) > 0:
                     self._last_log_time = now
-                    debug(f"Direção: {steering_input:.1f}% → {final_angle:.1f}°", "STEERING")
+                    debug(
+                        f"Direção: {steering_input:.1f}% → {final_angle:.1f}°",
+                        "STEERING",
+                    )
             else:
                 warn("Servo não inicializado!", "STEERING")
 
@@ -292,7 +309,6 @@ class SteeringManager:
                 self.total_steering_angle += abs(target_angle)
                 self.max_angle_reached = max(self.max_angle_reached, abs(target_angle))
                 self.last_movement_time = time.time()
-
 
     # REMOVIDO: funções auxiliares não usadas - movimento direto
 

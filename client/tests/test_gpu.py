@@ -5,15 +5,18 @@ Roda: python test_gpu.py
 """
 
 import subprocess
-import sys
 
 
 def test_nvidia_smi():
     print("=== nvidia-smi ===")
     result = subprocess.run(
-        ["nvidia-smi", "--query-gpu=name,compute_cap,driver_version,memory.total",
-         "--format=csv,noheader"],
-        capture_output=True, text=True
+        [
+            "nvidia-smi",
+            "--query-gpu=name,compute_cap,driver_version,memory.total",
+            "--format=csv,noheader",
+        ],
+        capture_output=True,
+        text=True,
     )
     if result.returncode == 0:
         name, cc, driver, mem = result.stdout.strip().split(", ")
@@ -30,6 +33,7 @@ def test_cupy_import():
     print("=== Import CuPy ===")
     try:
         import cupy as cp
+
         print(f"  CuPy versao:   {cp.__version__}")
         cuda_ver = cp.cuda.runtime.runtimeGetVersion()
         major = cuda_ver // 1000
@@ -68,10 +72,10 @@ def test_device_info(cp):
 def test_basic_ops(cp):
     print("=== Operacoes Basicas ===")
     ops = [
-        ("Alocacao array",  lambda: cp.zeros((1000, 1000), dtype=cp.float32)),
-        ("Soma",            lambda: float(cp.sum(cp.ones((1000, 1000), dtype=cp.float32)))),
-        ("Multiplicacao",   lambda: cp.ones((512, 512), dtype=cp.float32) * 2.0),
-        ("Indexacao",       lambda: cp.arange(1000)[::2]),
+        ("Alocacao array", lambda: cp.zeros((1000, 1000), dtype=cp.float32)),
+        ("Soma", lambda: float(cp.sum(cp.ones((1000, 1000), dtype=cp.float32)))),
+        ("Multiplicacao", lambda: cp.ones((512, 512), dtype=cp.float32) * 2.0),
+        ("Indexacao", lambda: cp.arange(1000)[::2]),
     ]
     for name, fn in ops:
         try:
@@ -87,6 +91,7 @@ def test_convolution(cp):
     print("=== Convolucao (usada nos filtros de video) ===")
     try:
         from cupyx.scipy import ndimage as cp_ndimage
+
         kernel = cp.ones((3, 3), dtype=cp.float32) / 9
         img = cp.ones((480, 640), dtype=cp.float32)
         cp_ndimage.convolve(img, kernel)
@@ -98,6 +103,7 @@ def test_convolution(cp):
     try:
         import numpy as np
         from cupyx.scipy import ndimage as cp_ndimage
+
         img_np = (255 * np.random.rand(480, 640, 3)).astype(np.float32)
         img_gpu = cp.asarray(img_np)
         kernel = cp.ones((3, 3), dtype=cp.float32) / 9
@@ -129,7 +135,9 @@ def test_transfer(cp):
             cp.asnumpy(arr_gpu)
             t_down = (time.perf_counter() - t0) * 1000
 
-            print(f"  {h}x{w} ({size_mb:.1f}MB): CPU->GPU {t_up:.1f}ms | GPU->CPU {t_down:.1f}ms")
+            print(
+                f"  {h}x{w} ({size_mb:.1f}MB): CPU->GPU {t_up:.1f}ms | GPU->CPU {t_down:.1f}ms"
+            )
     except Exception as e:
         print(f"  ERRO: {e}")
     print()
@@ -143,31 +151,38 @@ def conclusion(cp):
 
     try:
         from cupyx.scipy import ndimage as cp_ndimage
+
         k = cp.ones((3, 3), dtype=cp.float32) / 9
         img = cp.ones((8, 8), dtype=cp.float32)
         cp_ndimage.convolve(img, k)
         cp.cuda.Stream.null.synchronize()
         print("  GPU COMPATIVEL com os filtros de video do projeto!")
         print("  image_filters.py usara GPU automaticamente.")
-    except Exception as e:
+    except Exception:
         cc = cp.cuda.Device(0).compute_capability
         cuda_ver = cp.cuda.runtime.runtimeGetVersion()
         major = cuda_ver // 1000
         patch = (cuda_ver % 1000) // 10
-        print(f"  GPU NAO COMPATIVEL com CuPy pre-compilado.")
+        print("  GPU NAO COMPATIVEL com CuPy pre-compilado.")
         print(f"  Compute Capability {cc} (GPU serie 50xx / Blackwell)")
         print(f"  CUDA runtime disponivel: {major}.{patch}")
         print()
-        print("  Causa: os wheels pre-compilados do CuPy foram gerados com CUDA < 12.8,")
+        print(
+            "  Causa: os wheels pre-compilados do CuPy foram gerados com CUDA < 12.8,"
+        )
         print("  que nao inclui suporte a sm_120. E necessario compilar do source")
         print("  usando CUDA 12.8+ para gerar kernels para Blackwell.")
         print()
         print("  Para compilar do source (requer ~30min e CUDA toolkit >= 12.8):")
         print("     pip uninstall cupy-cuda12x cupy-cuda13x")
-        print("     CUPY_NVCC_GENERATE_CODE=arch=compute_120,code=sm_120 pip install cupy --no-binary cupy")
+        print(
+            "     CUPY_NVCC_GENERATE_CODE=arch=compute_120,code=sm_120 pip install cupy --no-binary cupy"
+        )
         print()
         print("  Alternativas:")
-        print("  1. Aguardar wheel oficial com suporte a sm_120 em versoes futuras do CuPy")
+        print(
+            "  1. Aguardar wheel oficial com suporte a sm_120 em versoes futuras do CuPy"
+        )
         print("  2. Usar CPU (automatico -- a aplicacao funciona normalmente sem GPU)")
     print()
 

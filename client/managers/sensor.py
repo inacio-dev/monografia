@@ -39,7 +39,12 @@ from .constants import DEFAULT_SENSOR_HISTORY_SIZE
 class SensorDisplay:
     """Gerencia processamento e exibição de dados de sensores"""
 
-    def __init__(self, sensor_queue=None, log_queue=None, history_size=DEFAULT_SENSOR_HISTORY_SIZE):
+    def __init__(
+        self,
+        sensor_queue=None,
+        log_queue=None,
+        history_size=DEFAULT_SENSOR_HISTORY_SIZE,
+    ):
         """
         Inicializa o processador de sensores
 
@@ -279,9 +284,10 @@ class SensorDisplay:
                     continue
                 if key not in self.history:
                     # Novo campo: preenche com None para alinhar (mantém deque com maxlen)
-                    self.history[key] = deque([None] * (n - 1), maxlen=self.history_size)
+                    self.history[key] = deque(
+                        [None] * (n - 1), maxlen=self.history_size
+                    )
                 self.history[key].append(value)
-
 
         except Exception as e:
             self._log("ERROR", f"Erro ao atualizar histórico: {e}")

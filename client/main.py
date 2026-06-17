@@ -111,7 +111,6 @@ class F1ClientApplication:
 
         # Estatísticas
 
-
         # Logging throttle para G923 (evita spam no console)
         self._g923_last_log_time = 0.0
         self._g923_log_interval = 1.0  # Log a cada 1 segundo no máximo
@@ -139,12 +138,14 @@ class F1ClientApplication:
                     self._g923_last_log_time = now
                     g923 = self.g923_manager
                     if g923:
-                        log_queue.put((
-                            "DEBUG",
-                            f"G923: DIR={g923._steering:+4d}° "
-                            f"ACEL={g923._throttle:3d}% "
-                            f"FREIO={g923._brake:3d}%",
-                        ))
+                        log_queue.put(
+                            (
+                                "DEBUG",
+                                f"G923: DIR={g923._steering:+4d}° "
+                                f"ACEL={g923._throttle:3d}% "
+                                f"FREIO={g923._brake:3d}%",
+                            )
+                        )
             elif command_type in ["GEAR_UP", "GEAR_DOWN"]:
                 log_queue.put(("INFO", f"G923: {command_type}"))
 
@@ -154,12 +155,9 @@ class F1ClientApplication:
                     self._control_state = value
             elif command_type in ["GEAR_UP", "GEAR_DOWN"]:
                 # Eventos de marcha: envia imediatamente (não são estado contínuo)
-                if (
-                    self.network_client
-                    and self.network_client.packets_received > 0
-                ):
+                if self.network_client and self.network_client.packets_received > 0:
                     self.network_client.send_control_command(command_type, 1.0)
-        except Exception as e:
+        except Exception:
             log_queue.put(("WARN", f"Falha ao enviar comando: {command_type}:{value}"))
 
     def initialize_components(self):
@@ -260,7 +258,10 @@ class F1ClientApplication:
                 log_queue.put(("INFO", "G923 conectado e ativo"))
             else:
                 log_queue.put(
-                    ("WARN", "G923 não encontrado - use sliders ou teclado como fallback")
+                    (
+                        "WARN",
+                        "G923 não encontrado - use sliders ou teclado como fallback",
+                    )
                 )
 
     def start_command_tx_thread(self):
@@ -279,10 +280,7 @@ class F1ClientApplication:
         next_tick = time.monotonic()
         while self.running:
             try:
-                if (
-                    self.network_client
-                    and self.network_client.packets_received > 0
-                ):
+                if self.network_client and self.network_client.packets_received > 0:
                     with self._control_state_lock:
                         state = self._control_state
                     self.network_client.send_control_command("STATE", state)
@@ -579,7 +577,9 @@ def main():
     info("F1 CAR CLIENT - REMOTE CONTROL RECEIVER")
     info("Recebe vídeo + sensores do Raspberry Pi")
     info("=" * 60)
-    info(f"Porta: {args.port} | Buffer: {args.buffer} KB | Debug: {'Ativado' if args.debug else 'Desativado'}")
+    info(
+        f"Porta: {args.port} | Buffer: {args.buffer} KB | Debug: {'Ativado' if args.debug else 'Desativado'}"
+    )
 
     # Validação de argumentos
     if not (1024 <= args.port <= 65535):
@@ -602,7 +602,9 @@ def main():
         warn(f"Não foi possível resolver {rpi_hostname}, usando hostname direto")
         rpi_ip = rpi_hostname
 
-    info(f"Vídeo: {rpi_ip}:{VIDEO_PORT} | Sensores: {rpi_ip}:{SENSOR_PORT} | Comandos: {client_ip}:{COMMAND_PORT}")
+    info(
+        f"Vídeo: {rpi_ip}:{VIDEO_PORT} | Sensores: {rpi_ip}:{SENSOR_PORT} | Comandos: {client_ip}:{COMMAND_PORT}"
+    )
 
     # Criar e executar aplicação com IPs fixos
     app = F1ClientApplication(

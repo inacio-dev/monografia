@@ -115,9 +115,9 @@ class CameraManager:
 
     # Presets de resolução
     RESOLUTION_PRESETS = {
-        "480p": (640, 480),      # VGA - leve
-        "720p": (1280, 720),     # HD - balanceado
-        "1080p": (1920, 1080),   # Full HD - alta qualidade
+        "480p": (640, 480),  # VGA - leve
+        "720p": (1280, 720),  # HD - balanceado
+        "1080p": (1920, 1080),  # Full HD - alta qualidade
     }
 
     def __init__(
@@ -183,7 +183,10 @@ class CameraManager:
                     for i, cam in enumerate(camera_info):
                         debug(f"  [{i}] {cam.get('Model', 'Desconhecida')}", "CAMERA")
                 else:
-                    error("Nenhuma câmera detectada! Execute: libcamera-hello --list-cameras", "CAMERA")
+                    error(
+                        "Nenhuma câmera detectada! Execute: libcamera-hello --list-cameras",
+                        "CAMERA",
+                    )
                     return False
             except Exception as e:
                 warn(f"Erro ao listar câmeras: {e}", "CAMERA")
@@ -254,12 +257,18 @@ class CameraManager:
             self.start_time = time.time()
 
             self.is_initialized = True
-            info(f"Câmera inicializada | {self.resolution[0]}x{self.resolution[1]} | MJPEG Q={self.quality} | {self.frame_rate}fps", "CAMERA")
+            info(
+                f"Câmera inicializada | {self.resolution[0]}x{self.resolution[1]} | MJPEG Q={self.quality} | {self.frame_rate}fps",
+                "CAMERA",
+            )
 
             return True
 
         except IndexError as e:
-            error(f"Erro ao detectar câmera: {e} | Verifique cabo e raspi-config -> Camera", "CAMERA")
+            error(
+                f"Erro ao detectar câmera: {e} | Verifique cabo e raspi-config -> Camera",
+                "CAMERA",
+            )
 
             self.is_initialized = False
             return False
@@ -339,8 +348,9 @@ class CameraManager:
 
         return {"size_bytes": size_bytes, "size_kb": round(size_kb, 2)}
 
-
-    def set_controls(self, sharpness=None, contrast=None, saturation=None, brightness=None):
+    def set_controls(
+        self, sharpness=None, contrast=None, saturation=None, brightness=None
+    ):
         """
         Ajusta controles de imagem em tempo real
 

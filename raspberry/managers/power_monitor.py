@@ -134,15 +134,17 @@ class PowerMonitorManager:
     BATTERY_VOLTAGE_CAL = 0.9309
 
     # Faixa do percentual da bateria, em tensão REAL (pós-calibração).
-    # Limite inferior baseado na química do LiPo: 3,4 V/célula é o piso
-    # conservador para preservar a saúde da bateria (abaixo disso a célula
-    # começa a sofrer degradação acelerada). 3,4 × 3 = 10,20 V para 3S.
+    # Limite inferior aferido empiricamente: o alarme de baixa tensão da
+    # LiPo dispara (buzzer apitando) em 10,8 V, ou seja, 3,6 V/célula para
+    # 3S. Esse é o ponto prático de descarga e deve corresponder a 0% para
+    # que o medidor zere exatamente quando o alarme soa, em vez de ainda
+    # indicar carga residual.
     # Limite superior: 13,6 × 0,9309 = 12,66, herdado da régua empírica do
     # autor reescalada pela calibração de ganho (≈ 4,22 V/célula, levemente
     # acima dos 4,20 V de carga plena teórica). Se BATTERY_VOLTAGE_CAL
     # mudar no futuro, estes limites NÃO devem acompanhar: já estão em
     # tensão real.
-    BATTERY_PCT_MIN = 10.20  # 0% (3,4 V/célula, piso de saúde do LiPo)
+    BATTERY_PCT_MIN = 10.80  # 0% (3,6 V/célula, disparo do buzzer da LiPo)
     BATTERY_PCT_MAX = 12.66  # 100% (carga plena empírica)
 
     def __init__(
@@ -244,7 +246,10 @@ class PowerMonitorManager:
             # Inicializa INA219 (I2C)
             if self.i2c_bus:
                 self.ina219_available = self._init_ina219()
-                info(f"INA219: {'Online' if self.ina219_available else 'Offline'}", "POWER")
+                info(
+                    f"INA219: {'Online' if self.ina219_available else 'Offline'}",
+                    "POWER",
+                )
                 # Close I2C bus if INA219 init failed and no other use for it
                 if not self.ina219_available:
                     try:
@@ -255,7 +260,10 @@ class PowerMonitorManager:
 
             # Inicializa Pro Micro (USB Serial)
             self.pro_micro_connected = self._init_pro_micro()
-            info(f"Pro Micro: {'Online' if self.pro_micro_connected else 'Offline'}", "POWER")
+            info(
+                f"Pro Micro: {'Online' if self.pro_micro_connected else 'Offline'}",
+                "POWER",
+            )
 
             # Inicia thread de leitura serial
             self._running = True
@@ -272,7 +280,10 @@ class PowerMonitorManager:
                 return True
             else:
                 self.is_initialized = True
-                warn("Nenhum sensor de energia disponível (tentará reconectar Pro Micro)", "POWER")
+                warn(
+                    "Nenhum sensor de energia disponível (tentará reconectar Pro Micro)",
+                    "POWER",
+                )
                 return True
 
         except Exception as e:
@@ -341,7 +352,10 @@ class PowerMonitorManager:
             arduino_vids = {0x2341, 0x1B4F, 0x239A}
             for port in serial.tools.list_ports.comports():
                 if port.vid in arduino_vids:
-                    debug(f"Pro Micro encontrado via VID 0x{port.vid:04X}: {port.device}", "POWER")
+                    debug(
+                        f"Pro Micro encontrado via VID 0x{port.vid:04X}: {port.device}",
+                        "POWER",
+                    )
                     return port.device
         except ImportError:
             pass
@@ -393,7 +407,10 @@ class PowerMonitorManager:
                 elif status == "CALIBRATING":
                     info("Pro Micro: calibrando sensores...", "POWER")
                 elif status == "NO_CAL":
-                    info("Pro Micro: sem calibração salva, usando offset teórico", "POWER")
+                    info(
+                        "Pro Micro: sem calibração salva, usando offset teórico",
+                        "POWER",
+                    )
             elif line.startswith("CAL_DONE:"):
                 info(f"Pro Micro: calibração concluída ({line[9:]})", "POWER")
 
@@ -547,11 +564,15 @@ class PowerMonitorManager:
             if self.i2c_lock:
                 self.i2c_lock.acquire(priority=2)  # Baixa
                 try:
-                    self.i2c_bus.write_i2c_block_data(self.ina219_address, register, [msb, lsb])
+                    self.i2c_bus.write_i2c_block_data(
+                        self.ina219_address, register, [msb, lsb]
+                    )
                 finally:
                     self.i2c_lock.release()
             else:
-                self.i2c_bus.write_i2c_block_data(self.ina219_address, register, [msb, lsb])
+                self.i2c_bus.write_i2c_block_data(
+                    self.ina219_address, register, [msb, lsb]
+                )
             return True
         except Exception:
             return False
@@ -562,11 +583,15 @@ class PowerMonitorManager:
             if self.i2c_lock:
                 self.i2c_lock.acquire(priority=2)  # Baixa
                 try:
-                    data = self.i2c_bus.read_i2c_block_data(self.ina219_address, register, 2)
+                    data = self.i2c_bus.read_i2c_block_data(
+                        self.ina219_address, register, 2
+                    )
                 finally:
                     self.i2c_lock.release()
             else:
-                data = self.i2c_bus.read_i2c_block_data(self.ina219_address, register, 2)
+                data = self.i2c_bus.read_i2c_block_data(
+                    self.ina219_address, register, 2
+                )
             return (data[0] << 8) | data[1]
         except Exception:
             return None
@@ -645,9 +670,7 @@ class PowerMonitorManager:
             voltage = self._read_ina219_bus_voltage()
             if voltage is not None:
                 self.ema_voltage = self._apply_ema_filter(voltage, self.ema_voltage)
-                self.voltage_rpi = (
-                    self.ema_voltage if self.ema_initialized else voltage
-                )
+                self.voltage_rpi = self.ema_voltage if self.ema_initialized else voltage
                 self.buffer_voltage_rpi.append(self.voltage_rpi)
                 success = True
 

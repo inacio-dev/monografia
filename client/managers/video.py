@@ -164,14 +164,16 @@ class VideoDisplay:
                     self.tkinter_label.configure(image=photo)
                     self.tkinter_label.image = photo
                     if status_cb and self.is_running:
-                        status_cb({
-                            "connected": True,
-                            "width": width,
-                            "height": height,
-                            "resolution": f"{width}x{height}",
-                            "fps": fps,
-                            "codec": "MJPEG",
-                        })
+                        status_cb(
+                            {
+                                "connected": True,
+                                "width": width,
+                                "height": height,
+                                "resolution": f"{width}x{height}",
+                                "fps": fps,
+                                "codec": "MJPEG",
+                            }
+                        )
                 except (tk.TclError, RuntimeError):
                     pass
 
@@ -222,8 +224,7 @@ class VideoDisplay:
             # Redimensiona se necessário
             if new_width != img_width or new_height != img_height:
                 pil_image = pil_image.resize(
-                    (new_width, new_height),
-                    Image.Resampling.LANCZOS
+                    (new_width, new_height), Image.Resampling.LANCZOS
                 )
 
             return pil_image
@@ -293,10 +294,24 @@ class VideoDisplay:
             thickness = 1
 
             y = self._OVERLAY_Y_START
-            cv2.putText(frame, fps_text, (self._OVERLAY_X, y), font, font_scale, color, thickness)
+            cv2.putText(
+                frame,
+                fps_text,
+                (self._OVERLAY_X, y),
+                font,
+                font_scale,
+                color,
+                thickness,
+            )
             y += self._OVERLAY_Y_STEP
             cv2.putText(
-                frame, resolution_text, (self._OVERLAY_X, y), font, font_scale, color, thickness
+                frame,
+                resolution_text,
+                (self._OVERLAY_X, y),
+                font,
+                font_scale,
+                color,
+                thickness,
             )
 
             if filter_text:
@@ -386,7 +401,9 @@ class VideoDisplay:
         try:
             latest_frame = None
             frames_decoded = 0
-            max_frames = MAX_VIDEO_QUEUE_FRAMES  # Limita para não travar se fila acumular muito
+            max_frames = (
+                MAX_VIDEO_QUEUE_FRAMES  # Limita para não travar se fila acumular muito
+            )
 
             while frames_decoded < max_frames:
                 try:
@@ -431,7 +448,10 @@ class VideoDisplay:
                     except queue.Empty:
                         # Timeout - verifica se precisa mostrar "sem sinal"
                         current_time = time.time()
-                        if current_time - last_frame_time > 2.0 and not no_signal_displayed:
+                        if (
+                            current_time - last_frame_time > 2.0
+                            and not no_signal_displayed
+                        ):
                             self.display_no_signal()
                             no_signal_displayed = True
                         continue

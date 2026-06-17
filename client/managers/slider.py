@@ -27,8 +27,13 @@ class SliderController:
     _FG_BRAKE = "#ff4444"
     _FG_STEERING = "#4488ff"
 
-    def __init__(self, network_client=None, log_callback=None, g923_manager=None,
-                 state_callback=None):
+    def __init__(
+        self,
+        network_client=None,
+        log_callback=None,
+        g923_manager=None,
+        state_callback=None,
+    ):
         """
         Inicializa o controlador de sliders
 
@@ -182,7 +187,11 @@ class SliderController:
 
         for i, mark in enumerate(["100%", "75%", "50%", "25%", "0%"]):
             label = tk.Label(
-                throttle_marks, text=mark, bg=self._BG_COLOR, fg=self._FG_LABEL, font=("Arial", 8)
+                throttle_marks,
+                text=mark,
+                bg=self._BG_COLOR,
+                fg=self._FG_LABEL,
+                font=("Arial", 8),
             )
             label.pack()
 
@@ -224,7 +233,11 @@ class SliderController:
 
         for i, mark in enumerate(["100%", "75%", "50%", "25%", "0%"]):
             label = tk.Label(
-                brake_marks, text=mark, bg=self._BG_COLOR, fg=self._FG_LABEL, font=("Arial", 8)
+                brake_marks,
+                text=mark,
+                bg=self._BG_COLOR,
+                fg=self._FG_LABEL,
+                font=("Arial", 8),
             )
             label.pack()
 
@@ -270,7 +283,11 @@ class SliderController:
 
         for mark in ["⬅️ ESQ", "⬅️", "🎯 CENTRO", "➡️", "➡️ DIR"]:
             label = tk.Label(
-                marks_frame, text=mark, bg=self._BG_COLOR, fg=self._FG_LABEL, font=("Arial", 8)
+                marks_frame,
+                text=mark,
+                bg=self._BG_COLOR,
+                fg=self._FG_LABEL,
+                font=("Arial", 8),
             )
             label.pack(side=tk.LEFT, padx=15)
 
@@ -497,7 +514,9 @@ class SliderController:
             return
 
         if not self.g923_manager or not self.g923_manager.is_connected():
-            self._log("WARN", "G923 não conectado! Conecte o volante antes de calibrar.")
+            self._log(
+                "WARN", "G923 não conectado! Conecte o volante antes de calibrar."
+            )
             if self.cal_status_label:
                 self.cal_status_label.config(
                     text="G923 não conectado! Conecte o volante primeiro.",

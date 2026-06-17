@@ -714,9 +714,18 @@ class ConsoleInterface:
                     "g_force_vertical",
                 ]:
                     formatted_value = f"{value:+.3f}"
-                elif var_name in ["temperature_c", "temperature_f", "temperature_k", "rpi_cpu_temp_c"]:
+                elif var_name in [
+                    "temperature_c",
+                    "temperature_f",
+                    "temperature_k",
+                    "rpi_cpu_temp_c",
+                ]:
                     formatted_value = f"{value:.1f}"
-                elif var_name in ["rpi_cpu_usage_percent", "rpi_mem_usage_percent", "rpi_disk_usage_percent"]:
+                elif var_name in [
+                    "rpi_cpu_usage_percent",
+                    "rpi_mem_usage_percent",
+                    "rpi_disk_usage_percent",
+                ]:
                     formatted_value = f"{value:.1f}"
                 elif var_name in ["rpi_net_rx_rate_kbps", "rpi_net_tx_rate_kbps"]:
                     formatted_value = f"{value:.1f}"
@@ -724,9 +733,17 @@ class ConsoleInterface:
                     formatted_value = f"{value:.2f}"
                 elif var_name in ["rpi_cpu_freq_mhz"]:
                     formatted_value = f"{value}"
-                elif var_name in ["rpi_mem_total_mb", "rpi_mem_used_mb", "rpi_mem_free_mb"]:
+                elif var_name in [
+                    "rpi_mem_total_mb",
+                    "rpi_mem_used_mb",
+                    "rpi_mem_free_mb",
+                ]:
                     formatted_value = f"{value}"
-                elif var_name in ["rpi_disk_total_gb", "rpi_disk_used_gb", "rpi_disk_free_gb"]:
+                elif var_name in [
+                    "rpi_disk_total_gb",
+                    "rpi_disk_used_gb",
+                    "rpi_disk_free_gb",
+                ]:
                     formatted_value = f"{value}"
                 elif var_name in ["rpi_net_rx_mb", "rpi_net_tx_mb"]:
                     formatted_value = f"{value:.1f}"
@@ -851,7 +868,9 @@ class ConsoleInterface:
 
             # Atualiza variáveis Tkinter
             if "client_cpu_usage_percent" in data:
-                self.client_vars["cpu_usage"].set(f"{data['client_cpu_usage_percent']:.1f}")
+                self.client_vars["cpu_usage"].set(
+                    f"{data['client_cpu_usage_percent']:.1f}"
+                )
                 self._update_client_cpu_color(data["client_cpu_usage_percent"])
 
             if "client_cpu_temp_c" in data and data["client_cpu_temp_c"] > 0:
@@ -864,7 +883,9 @@ class ConsoleInterface:
                 self.client_vars["cpu_freq"].set(f"{data['client_cpu_freq_mhz']}")
 
             if "client_mem_usage_percent" in data:
-                self.client_vars["mem_usage"].set(f"{data['client_mem_usage_percent']:.1f}")
+                self.client_vars["mem_usage"].set(
+                    f"{data['client_mem_usage_percent']:.1f}"
+                )
                 self._update_client_mem_color(data["client_mem_usage_percent"])
 
             if "client_net_rx_rate_kbps" in data:
@@ -874,7 +895,7 @@ class ConsoleInterface:
                 self.client_vars["net_tx"].set(f"{data['client_net_tx_rate_kbps']:.1f}")
 
             # Salva dados no display_data para que update_history() inclua no pickle
-            if self.sensor_display and hasattr(self.sensor_display, 'display_data'):
+            if self.sensor_display and hasattr(self.sensor_display, "display_data"):
                 self.sensor_display.display_data.update(data)
 
         except Exception as e:
@@ -920,6 +941,7 @@ class ConsoleInterface:
     def _update_rpi_system_colors(self, sensor_data):
         """Atualiza as cores dos displays de métricas do sistema RPi"""
         try:
+
             def get_usage_color(usage, warning=80, critical=95):
                 """Retorna cor baseada no uso percentual"""
                 if usage >= critical:
@@ -999,18 +1021,33 @@ class ConsoleInterface:
         """Processamento de sensores a 100Hz numa thread separada (sem Tkinter)"""
         interval = 1.0 / 100.0
         _calculated = [
-            "g_force_frontal", "g_force_lateral", "g_force_vertical",
-            "roll_angle", "pitch_angle", "yaw_angle",
-            "steering_feedback_intensity", "steering_feedback_direction",
-            "rumble_strong", "rumble_weak", "periodic_period_ms",
-            "periodic_magnitude", "inertia", "velocidade",
-            "g923_steering", "g923_throttle", "g923_brake",
+            "g_force_frontal",
+            "g_force_lateral",
+            "g_force_vertical",
+            "roll_angle",
+            "pitch_angle",
+            "yaw_angle",
+            "steering_feedback_intensity",
+            "steering_feedback_direction",
+            "rumble_strong",
+            "rumble_weak",
+            "periodic_period_ms",
+            "periodic_magnitude",
+            "inertia",
+            "velocidade",
+            "g923_steering",
+            "g923_throttle",
+            "g923_brake",
         ]
         while self.is_running:
             t0 = time.monotonic()
             try:
-                if (self.sensor_display and self.ff_calculator and self.velocity_calculator
-                        and self.sensor_display.process_queue()):
+                if (
+                    self.sensor_display
+                    and self.ff_calculator
+                    and self.velocity_calculator
+                    and self.sensor_display.process_queue()
+                ):
                     t_queue = time.monotonic() - t0
 
                     sensor_data = self.sensor_display.get_display_data()
@@ -1019,17 +1056,29 @@ class ConsoleInterface:
                     # (feito ANTES do calculate_g_forces_and_ff para o _append_export
                     #  do FF buffer encontrar esses campos no sensor_data)
                     if self.video_display:
-                        sensor_data["video_decode_ms"] = round(self.video_display._last_decode_ms, 2)
-                        sensor_data["video_filter_ms"] = round(self.video_display._last_filter_ms, 2)
+                        sensor_data["video_decode_ms"] = round(
+                            self.video_display._last_decode_ms, 2
+                        )
+                        sensor_data["video_filter_ms"] = round(
+                            self.video_display._last_filter_ms, 2
+                        )
                         active = self.video_display._last_active_filters
-                        sensor_data["video_filters_active"] = ",".join(active) if active else ""
+                        sensor_data["video_filters_active"] = (
+                            ",".join(active) if active else ""
+                        )
                         sensor_data["video_resolution"] = (
                             f"{self.video_display.original_width}x{self.video_display.original_height}"
-                            if self.video_display.original_width else ""
+                            if self.video_display.original_width
+                            else ""
                         )
                         # Timings individuais por filtro (apenas os ativos terão valor)
                         if self.video_display.image_filter:
-                            for fk, fms in self.video_display.image_filter.last_filter_timings.items():
+                            for (
+                                fk,
+                                fms,
+                            ) in (
+                                self.video_display.image_filter.last_filter_timings.items()
+                            ):
                                 sensor_data[f"filter_timing_{fk}_ms"] = fms
 
                     # Cálculos (sem Tkinter — thread-safe)
@@ -1039,7 +1088,9 @@ class ConsoleInterface:
                     t_calc = time.monotonic() - t_calc
 
                     ff_intensity = sensor_data.get("steering_feedback_intensity", 0.0)
-                    ff_direction = sensor_data.get("steering_feedback_direction", "neutral")
+                    ff_direction = sensor_data.get(
+                        "steering_feedback_direction", "neutral"
+                    )
 
                     # Envia FF via evdev (thread-safe)
                     t_ff = time.monotonic()
@@ -1082,17 +1133,26 @@ class ConsoleInterface:
                         )
                         active = self.video_display._last_active_filters
                         if active:
-                            client_timings["client_video_filters_active"] = ",".join(active)
+                            client_timings["client_video_filters_active"] = ",".join(
+                                active
+                            )
                         # Timing individual de cada filtro ativo
                         if self.video_display.image_filter:
-                            for fk, fms in self.video_display.image_filter.last_filter_timings.items():
+                            for (
+                                fk,
+                                fms,
+                            ) in (
+                                self.video_display.image_filter.last_filter_timings.items()
+                            ):
                                 client_timings[f"client_timing_filter_{fk}_ms"] = fms
                     self.sensor_display.inject_into_last_raw_row(client_timings)
                     with self.sensor_display.data_lock:
                         self.sensor_display.display_data.update(client_timings)
 
                     # Disponibiliza snapshot para a GUI thread
-                    sensor_data["client_timing_total_ms"] = round(t_total_client * 1000, 2)
+                    sensor_data["client_timing_total_ms"] = round(
+                        t_total_client * 1000, 2
+                    )
                     with self._sensor_data_lock:
                         self._latest_sensor_data = sensor_data
             except Exception as e:
@@ -1127,13 +1187,19 @@ class ConsoleInterface:
                 t_gui_update = time.monotonic() - t_gui_update
                 # Salva timing da GUI no sensor_data para histórico
                 with self.sensor_display.data_lock:
-                    self.sensor_display.display_data["client_timing_gui_ms"] = round(t_gui_update * 1000, 2)
-                    self.sensor_display.display_data["client_timing_gui_total_ms"] = round((time.monotonic() - t0_gui) * 1000, 2)
+                    self.sensor_display.display_data["client_timing_gui_ms"] = round(
+                        t_gui_update * 1000, 2
+                    )
+                    self.sensor_display.display_data["client_timing_gui_total_ms"] = (
+                        round((time.monotonic() - t0_gui) * 1000, 2)
+                    )
 
             # Atualizar status e sliders do G923
             if hasattr(self, "g923_manager") and self.g923_manager:
                 if self.g923_manager.is_connected():
-                    self.g923_status_var.set(f"Conectado - {self.g923_manager.device_name}")
+                    self.g923_status_var.set(
+                        f"Conectado - {self.g923_manager.device_name}"
+                    )
                     # Sincroniza sliders com valores do G923
                     if hasattr(self, "slider_controller") and self.slider_controller:
                         self.slider_controller.update_from_g923()
@@ -1430,11 +1496,19 @@ class ConsoleInterface:
 
             # Contexto e jerks
             v["ff_context"].set(sensor_data.get("ff_context", "Idle"))
-            v["ff_jerk_frontal"].set(f"{sensor_data.get('ff_jerk_frontal', 0):.1f} m/s³")
-            v["ff_jerk_vertical"].set(f"{sensor_data.get('ff_jerk_vertical', 0):.1f} m/s³")
-            v["ff_jerk_throttle"].set(f"{sensor_data.get('ff_jerk_throttle', 0):.0f} %/s")
+            v["ff_jerk_frontal"].set(
+                f"{sensor_data.get('ff_jerk_frontal', 0):.1f} m/s³"
+            )
+            v["ff_jerk_vertical"].set(
+                f"{sensor_data.get('ff_jerk_vertical', 0):.1f} m/s³"
+            )
+            v["ff_jerk_throttle"].set(
+                f"{sensor_data.get('ff_jerk_throttle', 0):.0f} %/s"
+            )
             v["ff_jerk_brake"].set(f"{sensor_data.get('ff_jerk_brake', 0):.0f} %/s")
-            v["ff_jerk_steering"].set(f"{sensor_data.get('ff_jerk_steering', 0):.0f} °/s²")
+            v["ff_jerk_steering"].set(
+                f"{sensor_data.get('ff_jerk_steering', 0):.0f} °/s²"
+            )
             v["ff_roughness"].set(f"{sensor_data.get('ff_roughness', 0):.2f} m/s²")
         except Exception:
             pass

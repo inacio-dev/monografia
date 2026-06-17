@@ -32,7 +32,6 @@ import socket
 import struct
 import threading
 import time
-from collections import defaultdict
 
 from .simple_logger import debug, error, info, warn
 
@@ -54,8 +53,8 @@ class NetworkClient:
 
     # Constantes de fragmentação (devem ser iguais ao servidor)
     FRAG_MAGIC = 0x46524147  # "FRAG" em ASCII hex
-    FRAG_HEADER_SIZE = 12    # 4 (magic) + 4 (frame_id) + 2 (chunk_idx) + 2 (total_chunks)
-    FRAG_TIMEOUT = 1.0       # Timeout para descartar fragmentos incompletos (segundos)
+    FRAG_HEADER_SIZE = 12  # 4 (magic) + 4 (frame_id) + 2 (chunk_idx) + 2 (total_chunks)
+    FRAG_TIMEOUT = 1.0  # Timeout para descartar fragmentos incompletos (segundos)
 
     def __init__(
         self,
@@ -112,7 +111,9 @@ class NetworkClient:
         self.raspberry_pi_ip = None
         self.is_connected_to_rpi = False
         self.last_packet_time = time.time()
-        self.connection_timeout = CONNECTION_TIMEOUT  # segundos (aumentado para tolerar perdas UDP)
+        self.connection_timeout = (
+            CONNECTION_TIMEOUT  # segundos (aumentado para tolerar perdas UDP)
+        )
 
         # Estatísticas (protegidas por _stats_lock)
         self._stats_lock = threading.Lock()
@@ -178,19 +179,26 @@ class NetworkClient:
         """
         try:
             self._log("INFO", "Inicializando cliente UDP bidirecional (Multi-Thread)")
-            self._log("INFO", f"Vídeo: porta {self.port}, Sensores: porta {self.sensor_port}, Comandos: porta {self.command_port}")
+            self._log(
+                "INFO",
+                f"Vídeo: porta {self.port}, Sensores: porta {self.sensor_port}, Comandos: porta {self.command_port}",
+            )
 
             # Socket para receber vídeo (porta 9999)
             self.receive_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.receive_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.receive_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, VIDEO_SOCKET_RCVBUF)
+            self.receive_socket.setsockopt(
+                socket.SOL_SOCKET, socket.SO_RCVBUF, VIDEO_SOCKET_RCVBUF
+            )
             self.receive_socket.settimeout(UDP_SOCKET_TIMEOUT)
             self.receive_socket.bind((self.host, self.port))
 
             # Socket para receber sensores (porta 9997)
             self.sensor_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.sensor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.sensor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, SENSOR_SOCKET_RCVBUF)
+            self.sensor_socket.setsockopt(
+                socket.SOL_SOCKET, socket.SO_RCVBUF, SENSOR_SOCKET_RCVBUF
+            )
             self.sensor_socket.settimeout(UDP_SOCKET_TIMEOUT)
             self.sensor_socket.bind((self.host, self.sensor_port))
 
@@ -304,7 +312,9 @@ class NetworkClient:
                 self._log("ERROR", f"Tamanho de frame inválido: {frame_size}")
                 return None, None
 
-            if sensor_size < 0 or sensor_size > MAX_SENSOR_SIZE:  # Máximo 50KB para sensores
+            if (
+                sensor_size < 0 or sensor_size > MAX_SENSOR_SIZE
+            ):  # Máximo 50KB para sensores
                 self._log("ERROR", f"Tamanho de sensor inválido: {sensor_size}")
                 return None, None
 
@@ -369,7 +379,9 @@ class NetworkClient:
                 return None, None
 
             # Extrai cabeçalho do fragmento
-            magic, frame_id, chunk_idx, total_chunks = struct.unpack("<IIHH", packet[:12])
+            magic, frame_id, chunk_idx, total_chunks = struct.unpack(
+                "<IIHH", packet[:12]
+            )
             chunk_data = packet[12:]
 
             current_time = time.time()
@@ -383,21 +395,21 @@ class NetworkClient:
                 # Cria entrada para este frame se não existe
                 if frame_id not in self.fragment_buffer:
                     self.fragment_buffer[frame_id] = {
-                        'chunks': {},
-                        'total': total_chunks,
-                        'timestamp': current_time
+                        "chunks": {},
+                        "total": total_chunks,
+                        "timestamp": current_time,
                     }
 
                 # Armazena chunk
-                self.fragment_buffer[frame_id]['chunks'][chunk_idx] = chunk_data
+                self.fragment_buffer[frame_id]["chunks"][chunk_idx] = chunk_data
 
                 # Verifica se temos todos os chunks
-                if len(self.fragment_buffer[frame_id]['chunks']) == total_chunks:
+                if len(self.fragment_buffer[frame_id]["chunks"]) == total_chunks:
                     # Reassembla o pacote completo
-                    complete_data = b''
+                    complete_data = b""
                     for i in range(total_chunks):
-                        if i in self.fragment_buffer[frame_id]['chunks']:
-                            complete_data += self.fragment_buffer[frame_id]['chunks'][i]
+                        if i in self.fragment_buffer[frame_id]["chunks"]:
+                            complete_data += self.fragment_buffer[frame_id]["chunks"][i]
                         else:
                             # Falta um chunk - não deveria acontecer
                             del self.fragment_buffer[frame_id]
@@ -448,7 +460,7 @@ class NetworkClient:
                 )
                 return None, None
 
-            frame_data = packet[4:4 + frame_size]
+            frame_data = packet[4 : 4 + frame_size]
             return frame_data, None
 
         except Exception as e:
@@ -459,7 +471,7 @@ class NetworkClient:
         """Remove fragmentos incompletos que expiraram"""
         expired_frames = []
         for frame_id, data in self.fragment_buffer.items():
-            if current_time - data['timestamp'] > self.FRAG_TIMEOUT:
+            if current_time - data["timestamp"] > self.FRAG_TIMEOUT:
                 expired_frames.append(frame_id)
 
         for frame_id in expired_frames:
@@ -525,11 +537,17 @@ class NetworkClient:
 
         self.is_running = True
         self._log("INFO", "Cliente de rede iniciado")
-        self._log("INFO", f"Vídeo: {self.rpi_ip}:{self.port}, Sensores: {self.rpi_ip}:{self.sensor_port}")
+        self._log(
+            "INFO",
+            f"Vídeo: {self.rpi_ip}:{self.port}, Sensores: {self.rpi_ip}:{self.sensor_port}",
+        )
 
         if self.rpi_ip:
             self.raspberry_pi_ip = self.rpi_ip
-            self._log("INFO", f"Raspberry Pi configurado: {self.raspberry_pi_ip} (aguardando conexão)")
+            self._log(
+                "INFO",
+                f"Raspberry Pi configurado: {self.raspberry_pi_ip} (aguardando conexão)",
+            )
 
         # Thread de sensores roda em background
         self._sensor_rx_thread = threading.Thread(
@@ -572,13 +590,17 @@ class NetworkClient:
                 try:
                     packet_str = packet.decode("utf-8")
                     if packet_str.startswith("SERVER_CONNECT"):
-                        self._log("INFO", "🔄 Recebido comando de reconexão do Raspberry Pi")
+                        self._log(
+                            "INFO", "🔄 Recebido comando de reconexão do Raspberry Pi"
+                        )
                         self.raspberry_pi_ip = addr[0]
                         self.is_connected_to_rpi = True
-                        self._update_status({
-                            "connection": f"Reconectado com {addr[0]}",
-                            "status": "Ativo via SERVER_CONNECT",
-                        })
+                        self._update_status(
+                            {
+                                "connection": f"Reconectado com {addr[0]}",
+                                "status": "Ativo via SERVER_CONNECT",
+                            }
+                        )
                         continue
                 except UnicodeDecodeError:
                     pass
@@ -626,7 +648,9 @@ class NetworkClient:
                     # Inclui clock skew (offset constante) — o jitter é o que importa
                     rpi_ts = sensor_data.get("timestamp")
                     if rpi_ts:
-                        sensor_data["net_latency_ms"] = round((t_recv - rpi_ts) * 1000, 2)
+                        sensor_data["net_latency_ms"] = round(
+                            (t_recv - rpi_ts) * 1000, 2
+                        )
                     sensor_data["client_recv_timestamp"] = t_recv
                     with self._stats_lock:
                         self.sensor_packets_received += 1
@@ -674,7 +698,7 @@ class NetworkClient:
 
             # Novo formato: 4 bytes tamanho + frame
             if len(packet) >= 4 + frame_size:
-                return packet[4:4 + frame_size]
+                return packet[4 : 4 + frame_size]
 
             return None
         except (struct.error, IndexError):
@@ -729,7 +753,7 @@ class NetworkClient:
                 pass
 
         # Aguarda threads de recepção pararem antes de fechar sockets
-        if hasattr(self, '_sensor_rx_thread') and self._sensor_rx_thread.is_alive():
+        if hasattr(self, "_sensor_rx_thread") and self._sensor_rx_thread.is_alive():
             self._sensor_rx_thread.join(timeout=2.0)
 
         # Fecha sockets
